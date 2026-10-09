@@ -1,0 +1,17 @@
+name: SteinCombat
+version: 0.0.3
+main: dev.xavier.stein.combat.server.SteinCombatPlugin
+author: X4vieer
+description: "Clas com tag [ABC] no Tab e sem fogo amigo entre os membros."
+commands:
+  clan:
+    description: "Clas: criar, convidar, aceitar, sair, expulsar, info, lista, desfazer"
+    usage: "/clan <criar|convidar|aceitar|sair|expulsar|info|lista|desfazer>"
+    aliases: [cla]
+permissions:
+  steincombat.clan:
+    description: Criar e participar de clas.
+    default: true
+  steincombat.admin:
+    description: Desfazer qualquer cla.
+    default: op
