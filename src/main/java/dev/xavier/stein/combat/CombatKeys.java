@@ -1,0 +1,121 @@
+/*
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
+ */
+
+package dev.xavier.stein.combat;
+
+import dev.xavier.stein.loader.api.Keys;
+import dev.xavier.stein.loader.api.Lang;
+
+/**
+ * Combat's key bindings (in the game's controls under "Combat", and on each feature's row in the
+ * Panel) and what each press does. Their names are the player's data (options.txt): they never
+ * change.
+ */
+final class CombatKeys {
+
+    private static final String CATEGORY = "key.categories.steincombat";
+
+    private final SteinCombat mod;
+
+    final Keys.Binding toggleSprint;
+    final Keys.Binding ally;
+    final Keys.Binding enemy;
+    final Keys.Binding hide;
+
+    // Each fight feature's on/off (no key by default: the player picks one in the Panel).
+    final Keys.Binding noHitDelay;
+    final Keys.Binding keepSprint;
+    final Keys.Binding omniSprint;
+    final Keys.Binding clanProtect;
+    final Keys.Binding autoArmor;
+    final Keys.Binding smartEffect;
+    final Keys.Binding autoProtect;
+    final Keys.Binding autoRefill;
+    final Keys.Binding autoclick;
+
+    /** Registers the bindings with the game; in afterStartGame. */
+    CombatKeys(SteinCombat mod) {
+        this.mod = mod;
+        toggleSprint = Keys.bind("key.steincombat.toggleSprint", Keys.KEY_G, CATEGORY);
+        ally = Keys.bind("key.steincombat.ally", Keys.KEY_Y, CATEGORY);
+        enemy = Keys.bind("key.steincombat.enemy", Keys.KEY_U, CATEGORY);
+        hide = Keys.bind("key.steincombat.hide", Keys.KEY_H, CATEGORY);
+        noHitDelay = Keys.bind("key.steincombat.noHitDelay", Keys.KEY_NONE, CATEGORY);
+        keepSprint = Keys.bind("key.steincombat.keepSprint", Keys.KEY_NONE, CATEGORY);
+        omniSprint = Keys.bind("key.steincombat.omniSprint", Keys.KEY_NONE, CATEGORY);
+        clanProtect = Keys.bind("key.steincombat.clanProtect", Keys.KEY_NONE, CATEGORY);
+        autoArmor = Keys.bind("key.steincombat.autoArmor", Keys.KEY_NONE, CATEGORY);
+        smartEffect = Keys.bind("key.steincombat.smartEffect", Keys.KEY_NONE, CATEGORY);
+        autoProtect = Keys.bind("key.steincombat.autoProtect", Keys.KEY_NONE, CATEGORY);
+        autoRefill = Keys.bind("key.steincombat.autoRefill", Keys.KEY_NONE, CATEGORY);
+        autoclick = Keys.bind("key.steincombat.autoclick", Keys.KEY_NONE, CATEGORY);
+    }
+
+    /** Every tick: the presses since the last one, in order. */
+    void handle() {
+        CombatConfig c = mod.config;
+        while (toggleSprint.consumeClick()) {
+            mod.sprint.toggled = !mod.sprint.toggled;
+            Say.actionBar(
+                    Lang.tr(mod.sprint.toggled ? "steincombat.sprintOn" : "steincombat.sprintOff"));
+        }
+        while (ally.consumeClick()) {
+            mod.marks.allyAtCrosshair();
+        }
+        while (enemy.consumeClick()) {
+            mod.marks.enemyAtCrosshair();
+        }
+        while (hide.consumeClick()) {
+            mod.guard.hiding = !mod.guard.hiding;
+            Say.chat(Lang.tr(mod.guard.hiding ? "steincombat.hideOn" : "steincombat.hideOff"));
+        }
+        while (noHitDelay.consumeClick()) {
+            c.noHitDelay = !c.noHitDelay;
+            toggled("steincombat.noHitDelay", c.noHitDelay);
+        }
+        while (keepSprint.consumeClick()) {
+            c.sprintOnHit = !c.sprintOnHit;
+            toggled("steincombat.sprintOnHit", c.sprintOnHit);
+        }
+        while (omniSprint.consumeClick()) {
+            c.allDirections = !c.allDirections;
+            toggled("steincombat.allDirections", c.allDirections);
+        }
+        while (clanProtect.consumeClick()) {
+            c.protectAllies = !c.protectAllies;
+            toggled("steincombat.protect", c.protectAllies);
+        }
+        while (autoArmor.consumeClick()) {
+            c.autoArmor = !c.autoArmor;
+            toggled("steincombat.autoArmor", c.autoArmor);
+        }
+        while (autoRefill.consumeClick()) {
+            // In on-key mode, pressing asks for one trip to the chest (which turns itself off at
+            // the
+            // end), and does not toggle: pressing again in the middle of a trip does not cancel it.
+            c.autoRefill = c.refillMode == AutoRefill.ON_KEY || !c.autoRefill;
+            toggled("steincombat.autoRefill", c.autoRefill);
+        }
+        while (autoProtect.consumeClick()) {
+            c.autoProtect = !c.autoProtect;
+            toggled("steincombat.autoProtect", c.autoProtect);
+        }
+        while (smartEffect.consumeClick()) {
+            c.smartEffect = !c.smartEffect;
+            toggled("steincombat.smartEffect", c.smartEffect);
+        }
+        while (autoclick.consumeClick()) {
+            c.autoclick = !c.autoclick;
+            toggled("steincombat.autoclick", c.autoclick);
+        }
+    }
+
+    /** A feature turned on or off by its key: saves and says so on the action bar. */
+    private void toggled(String nameKey, boolean on) {
+        mod.save();
+        Say.actionBar(
+                Lang.tr(on ? "steincombat.featureOn" : "steincombat.featureOff", Lang.tr(nameKey)));
+    }
+}

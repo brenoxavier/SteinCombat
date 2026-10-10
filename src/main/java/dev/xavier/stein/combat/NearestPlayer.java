@@ -1,33 +1,33 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Copyright (c) 2026 Breno Xavier
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
  */
 
 package dev.xavier.stein.combat;
 
-import java.util.List;
-import java.util.Locale;
 import dev.xavier.stein.loader.api.Entities;
-import dev.xavier.stein.loader.api.Lang;
 import dev.xavier.stein.loader.api.HudElement;
-import dev.xavier.stein.loader.api.Option;
 import dev.xavier.stein.loader.api.HudPlacement;
+import dev.xavier.stein.loader.api.Lang;
+import dev.xavier.stein.loader.api.Option;
 import dev.xavier.stein.loader.api.Render;
 
+import java.util.List;
+import java.util.Locale;
+
 /**
- * Distancia do jogador conhecido mais perto de um lado, na grade do HUD: o inimigo mais proximo (quem nao e aliado nem
- * do meu cla, {@link CombatApi}) ou o aliado mais proximo (aliado ou do meu cla) — dois elementos, um de cada. So os
- * que o cliente conhece — o que esta longe demais nao chega ate ele —, e invisivel nao conta. Sem ninguem por perto, o
- * elemento nao aparece.
+ * The distance to the nearest known player of one side, on the HUD grid: the nearest enemy (neither
+ * ally nor in my clan, {@link CombatApi}) or the nearest ally (ally or in my clan) — two elements,
+ * one of each. Only the players the client knows — whoever is too far away does not reach it —, and
+ * invisible ones do not count. With nobody around, the element does not show.
  */
 final class NearestPlayer implements HudElement {
 
     private final SteinCombat mod;
-    /** O do aliado mais proximo; falso, o do inimigo. */
+
+    /** The nearest ally's element; false, the nearest enemy's. */
     private final boolean ally;
+
     private String text = "";
 
     NearestPlayer(SteinCombat mod, boolean ally) {
@@ -71,7 +71,8 @@ final class NearestPlayer implements HudElement {
             return false;
         }
         String nick = near != null ? Entities.name(near) : Lang.tr("steinloader.hud.sample.player");
-        String distance = String.format(Locale.ROOT, "%.1f m", near != null ? best : 12.3F).replace('.', ',');
+        String distance =
+                String.format(Locale.ROOT, "%.1f m", near != null ? best : 12.3F).replace('.', ',');
         String color = ally ? "§" + mod.config.allyColor : "§c";
         boolean name = ally ? mod.config.nearestAllyName : mod.config.nearestName;
         text = name ? color + nick + " §f" + distance : color + distance;
@@ -95,7 +96,7 @@ final class NearestPlayer implements HudElement {
 
     @Override
     public HudPlacement defaultPlacement() {
-        // O do aliado logo abaixo do do inimigo.
+        // The ally's right below the enemy's.
         return new HudPlacement(1, 0, 0, ally ? 54 : 40, 1.0F, true, true);
     }
 
@@ -107,11 +108,17 @@ final class NearestPlayer implements HudElement {
     @Override
     public void options(List<Option> out) {
         if (ally) {
-            out.add(Option.toggle(Lang.tr("steincombat.hud.name"), () -> mod.config.nearestAllyName,
-                    v -> mod.config.nearestAllyName = v));
+            out.add(
+                    Option.toggle(
+                            Lang.tr("steincombat.hud.name"),
+                            () -> mod.config.nearestAllyName,
+                            v -> mod.config.nearestAllyName = v));
         } else {
-            out.add(Option.toggle(Lang.tr("steincombat.hud.name"), () -> mod.config.nearestName,
-                    v -> mod.config.nearestName = v));
+            out.add(
+                    Option.toggle(
+                            Lang.tr("steincombat.hud.name"),
+                            () -> mod.config.nearestName,
+                            v -> mod.config.nearestName = v));
         }
     }
 

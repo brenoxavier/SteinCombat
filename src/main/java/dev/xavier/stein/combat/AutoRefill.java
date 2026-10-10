@@ -1,9 +1,6 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Copyright (c) 2026 Breno Xavier
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
  */
 
 package dev.xavier.stein.combat;
@@ -12,120 +9,157 @@ import dev.xavier.stein.loader.api.Chat;
 import dev.xavier.stein.loader.api.Entities;
 import dev.xavier.stein.loader.api.Inventory;
 import dev.xavier.stein.loader.api.Lang;
-import dev.xavier.stein.loader.api.Stacks;
 
 /**
- * Auto Refill: quando as reservas de armadura do inventario acabam (ou ficam abaixo do alvo, no modo constante),
- * manda o comando do bau virtual do servidor ("/bau vip"), espera o bau abrir e traz as armaduras para a bolsa — com
- * a tela do bau escondida (o jogador continua jogando) ou a vista, como o jogador escolher.
+ * Auto Refill: when the inventory's armor spares run out (or fall below the target, in constant
+ * mode), sends the server's virtual chest command ("/bau vip"), waits for the chest to open and
+ * brings the armor into the bag — with the chest screen hidden (the player keeps playing) or in
+ * view, as the player chooses.
  *
- * <p>Um passo a cada 100 ms, e cada passo termina com o cursor vazio (o Smart Effect pode mexer no inventario no
- * meio). Trazer e: com um espaco livre na bolsa, pega do bau e larga nele; com uma armadura gasta na bolsa (e "guardar
- * as gastas" ligado, ou a bolsa cheia), <b>troca</b> — a do bau vem para o lugar da gasta e a gasta vai para o lugar
- * dela no bau, tres cliques. A troca e o que funciona com o bau cheio e com a bolsa cheia. Sem nada para trazer, as
- * gastas que sobraram vao para o bau, se couberem.
+ * <p>One step every 100 ms, and every step ends with the cursor empty (Smart Effect may touch the
+ * inventory in between). Bringing is: with a free space in the bag, pick from the chest and drop
+ * there; with a worn piece in the bag (and "return worn pieces" on, or the bag full), <b>swap</b> —
+ * the chest's piece goes where the worn one was and the worn one goes to its place in the chest,
+ * three clicks. Swapping is what works with a full chest and a full bag. With nothing to bring, the
+ * leftover worn pieces go to the chest, if they fit.
  *
- * <p>As regras sao as do Auto Armor de cada peca: so as pecas ligadas, o filtro de encantamento, e a prioridade de
- * protecao (as de maior ou de menor primeiro); gasta e a com a durabilidade no limite da regra.
+ * <p>The rules are Auto Armor's for each piece ({@link ArmorSlots}): only the pieces turned on, the
+ * enchantment filter, and the protection priority (highest or lowest first); worn is at the rule's
+ * durability threshold.
  *
- * <p>Funciona com o Auto Armor ligado ou nao: ele so le as regras, que valem mesmo com o Auto Armor desligado. Juntos,
- * o Auto Armor veste e o refil repoe a bolsa; sozinho, o refil so mantem a bolsa com as reservas.
+ * <p>It works with Auto Armor on or not: it only reads the rules, which apply even with Auto Armor
+ * off. Together, Auto Armor puts on and the refill restocks the bag; alone, the refill only keeps
+ * the bag stocked with spares.
  *
- * <p>Tres modos: quando a reserva de uma peca zera, constante (mantem o alvo de reservas por peca) e na tecla — ai o
- * Auto Refill nao fica ligado: a tecla (ou o botao no Painel) faz uma ida ao bau na hora, ate o alvo, e ele se
- * desliga sozinho no fim.
+ * <p>Three modes: when a piece's spares run out, constant (keeps the target spares per piece) and
+ * on key — then Auto Refill does not stay on: the key (or the Panel button) makes one trip to the
+ * chest right away, up to the target, and it turns itself off at the end.
  *
- * <p><b>Conferencia com o servidor</b>, como no Auto Armor: o cliente aplica cada clique na hora, e um clique que o
- * servidor recusa sem avisar deixaria o cliente achando que trouxe o que nao trouxe. Entao:
+ * <p><b>Checked with the server</b>, as in Auto Armor: the client applies each click at once, and a
+ * click the server silently refuses would leave the client thinking it brought what it did not. So:
+ *
  * <ul>
- *   <li>cada passo confere o proprio resultado; tres passos seguidos sem efeito pedem o conteudo de verdade da janela
- *       (Inventory.resync) e esperam ele chegar antes de seguir;
- *   <li>antes de fechar, se houve clique desde a ultima conferencia, confere mais uma vez — se o servidor desfez algo,
- *       o trabalho continua;
- *   <li>um item que ficou no cursor (clique recusado no meio da troca) volta para um lugar livre no passo seguinte;
- *   <li>depois de fechar, a bolsa e conferida com o servidor (a janela do jogador);
- *   <li>nada trava: as conferencias por ida tem limite, a ida tem tempo maximo, e as idas que falham seguidas esperam
- *       cada vez mais antes da proxima.
+ *   <li>each step checks its own result; three steps in a row with no effect ask for the window's
+ *       real contents (Inventory.resync) and wait for them before going on;
+ *   <li>before closing, if there was a click since the last check, it checks once more — if the
+ *       server undid something, the work goes on;
+ *   <li>an item left on the cursor (a click refused in the middle of a swap) goes back to a free
+ *       place in the next step;
+ *   <li>after closing, the bag is checked with the server (the player's window);
+ *   <li>nothing gets stuck: the checks per trip are capped, the trip has a maximum time, and trips
+ *       that fail in a row wait longer and longer before the next.
  * </ul>
  */
 final class AutoRefill {
 
-    /** {@code -Dsteincombat.debugNotices=true}: os avisos (sem item, troca, bau) no log. */
+    /** {@code -Dsteincombat.debugNotices=true}: the notices (no item, swap, chest) in the log. */
     private static final boolean NOTICES = Boolean.getBoolean("steincombat.debugNotices");
+
+    /** {@code -Dsteincombat.debugRefill=true}: every step in the log. */
+    private static final boolean DEBUG = Boolean.getBoolean("steincombat.debugRefill");
 
     static final int WHEN_EMPTY = 0;
     static final int CONSTANT = 1;
     static final int ON_KEY = 2;
 
-    /** 100 ms entre um passo e outro (2 ticks). */
+    /** 100 ms between steps (2 ticks). */
     private static final int STEP_TICKS = 2;
-    /** Quanto esperar o bau abrir depois do comando. */
+
+    /** How long to wait for the chest to open after the command. */
     private static final int OPEN_TIMEOUT = 60;
-    /** Tempo maximo com o bau aberto numa ida. */
+
+    /** Maximum time with the chest open on one trip. */
     private static final int SESSION_TIMEOUT = 300;
-    /** Passos seguidos sem efeito antes de pedir o conteudo de verdade. */
+
+    /** Steps in a row with no effect before asking for the real contents. */
     private static final int STUCK_STEPS = 3;
-    /** Conferencias com o servidor por ida, no maximo. */
+
+    /** Checks with the server per trip, at most. */
     private static final int MAX_RESYNCS = 4;
-    /** Quanto esperar o conteudo pedido chegar; sem resposta, segue com o que tem. */
+
+    /** How long to wait for the requested contents; with no answer, it goes on with what it has. */
     private static final int RESYNC_TIMEOUT = 40;
-    /** Depois de fechar o bau, a bolsa e conferida com o servidor neste tanto de ticks. */
+
+    /** After closing the chest, the bag is checked with the server in this many ticks. */
     private static final int VERIFY_TICKS = 10;
 
-    /** O resultado de um passo. */
+    /** A step's result. */
     private static final int NOTHING = 0;
+
     private static final int ACTED = 1;
     private static final int STUCK = 2;
 
-    private enum State { IDLE, WAITING, WORKING }
-
-    /** {@code -Dsteincombat.debugRefill=true}: cada passo no log. */
-    private static final boolean DEBUG = Boolean.getBoolean("steincombat.debugRefill");
+    private enum State {
+        IDLE,
+        WAITING,
+        WORKING
+    }
 
     private final SteinCombat mod;
     private State state = State.IDLE;
     private int timer;
     private int cooldown;
     private int stepWait;
-    /** Armaduras trazidas nesta ida. */
+
+    /** Pieces brought on this trip. */
     private int moved;
-    /** As reservas que serviam ao abrir o bau: o aviso conta o que a ida ganhou, e nao os cliques refeitos. */
+
+    /**
+     * The spares that fit when the chest opened: the notice counts what the trip gained, not the
+     * redone clicks.
+     */
     private int startSpares;
-    /** A janela do bau desta ida (para avisar o servidor se o jogador abrir outra tela por cima). */
+
+    /** This trip's chest window (to tell the server if the player opens another screen over it). */
     private int windowId;
-    /** Passos seguidos sem efeito. */
+
+    /** Steps in a row with no effect. */
     private int stuck;
-    /** Conferencias pedidas nesta ida. */
+
+    /** Checks asked for on this trip. */
     private int resyncs;
-    /** Esperando o conteudo pedido ate este tanto de ticks (0 nao esperando). */
+
+    /** Waiting for the requested contents for this many ticks (0 not waiting). */
     private int awaiting;
-    /** Houve clique desde a ultima conferencia. */
+
+    /** There was a click since the last check. */
     private boolean dirty;
-    /** O slot do bau do ultimo item pego (para onde volta um item que ficou no cursor). */
+
+    /** The chest slot of the last item picked (where an item left on the cursor goes back). */
     private int lastFrom = -1;
-    /** A bolsa ficou cheia sem gasta para trocar nesta ida (o aviso do fim). */
+
+    /** The bag was full with no worn piece to swap on this trip (the end notice). */
     private boolean bagFull;
-    /** O bau nao aceitou guardar uma gasta nesta ida: nao tenta de novo ate a proxima. */
+
+    /** The chest did not take a worn piece on this trip: no further try until the next. */
     private boolean depositBlocked;
-    /** Ticks ate conferir a bolsa depois de fechar o bau (0 nada marcado). */
+
+    /** Ticks until the bag is checked after closing the chest (0 nothing set). */
     private int verifyIn;
-    /** Idas seguidas que nao trouxeram nada por recusa ou tempo: a espera ate a proxima dobra. */
+
+    /**
+     * Trips in a row that brought nothing because of refusal or time: the wait until the next
+     * doubles.
+     */
     private int failStreak;
 
     AutoRefill(SteinCombat mod) {
         this.mod = mod;
     }
 
-    /** Esta com o bau do refil aberto (ou esperando abrir)? */
+    /** Is the refill chest open (or about to open)? */
     boolean busy() {
         return state != State.IDLE;
     }
 
-    /** O servidor mandou a janela inteira (SteinMod.onWindowItems): a do bau e o que a conferencia esperava. */
+    /**
+     * The server sent a whole window (SteinMod.onWindowItems): the chest's is what the check waited
+     * for.
+     */
     void windowItems(int id) {
         if (awaiting > 0 && state == State.WORKING && id == windowId) {
             awaiting = 0;
-            log("conteudo de verdade chegou");
+            log("real contents arrived");
         }
     }
 
@@ -135,97 +169,95 @@ final class AutoRefill {
             state = State.IDLE;
             verifyIn = 0;
             if (c.autoRefill && c.refillMode == ON_KEY) {
-                done(c);   // o pedido nao vale para o proximo mundo
+                done(c); // the request does not carry over to the next world
             }
             return;
         }
-        boolean onKey = c.refillMode == ON_KEY;
         switch (state) {
-            case IDLE -> {
-                if (verifyIn > 0 && --verifyIn == 0) {
-                    if (Inventory.isContainerOpen()) {
-                        verifyIn = 1;   // o jogador abriu outra janela: confere quando ela fechar
-                    } else {
-                        Inventory.resync();
-                        log("bolsa conferida com o servidor");
-                    }
-                }
-                if (cooldown > 0 && !onKey) {   // na tecla, quem pediu quer agora
-                    cooldown--;
-                    return;
-                }
-                if (!c.autoRefill || verifyIn > 0) {
-                    return;   // a conferencia da ida anterior vem antes de decidir outra
-                }
-                if (onKey && !needs(c)) {
-                    notice(Lang.tr("steincombat.refill.full"));
-                    done(c);
-                    return;
-                }
-                // Nunca por cima de uma tela de inventario do jogador: o bau tomaria o lugar dela.
-                if (!Inventory.isContainerOpen() && !Inventory.isScreenOpen() && needs(c)) {
-                    if (!c.refillShowWindow) {
-                        // O bau vem virtual: aberto no servidor, sem tela no cliente — nem uma piscada.
-                        Inventory.openVirtualNext(3000);
-                    }
-                    Chat.send(c.refillCommand.trim());
-                    log("comando enviado: " + c.refillCommand.trim());
-                    state = State.WAITING;
-                    timer = OPEN_TIMEOUT;
-                }
-            }
-            case WAITING -> {
-                if (Inventory.isContainerOpen()) {
-                    if (!c.refillShowWindow && Inventory.isScreenOpen()) {
-                        Inventory.hideContainerScreen();   // o virtual nao pegou (outro caminho de abertura): esconde
-                    }
-                    log("bau aberto: " + Inventory.containerSize() + " slots, janela " + (c.refillShowWindow ? "a vista" : "escondida"));
-                    state = State.WORKING;
-                    windowId = Inventory.windowId();
-                    timer = SESSION_TIMEOUT;
-                    stepWait = STEP_TICKS;
-                    moved = 0;
-                    startSpares = totalSpares(c);
-                    stuck = 0;
-                    resyncs = 0;
-                    awaiting = 0;
-                    dirty = false;
-                    lastFrom = -1;
-                    bagFull = false;
-                    depositBlocked = false;
-                } else if (--timer <= 0) {
-                    Inventory.openVirtualNext(0);
-                    log("o bau nao abriu (janela " + Inventory.windowId() + ", tela " + Inventory.isScreenOpen() + ")");
-                    notice(Lang.tr("steincombat.refill.noChest"));
-                    state = State.IDLE;
-                    cooldown = 200;
-                    done(c);
-                }
-            }
+            case IDLE -> idle(c);
+            case WAITING -> waiting(c);
             case WORKING -> work(c);
+        }
+    }
+
+    private void idle(CombatConfig c) {
+        boolean onKey = c.refillMode == ON_KEY;
+        if (verifyIn > 0 && --verifyIn == 0) {
+            if (Inventory.isContainerOpen()) {
+                verifyIn = 1; // the player opened another window: check when it closes
+            } else {
+                Inventory.resync();
+                log("bag checked with the server");
+            }
+        }
+        if (cooldown > 0 && !onKey) { // on key, whoever asked wants it now
+            cooldown--;
+            return;
+        }
+        if (!c.autoRefill || verifyIn > 0) {
+            return; // the previous trip's check comes before deciding another
+        }
+        if (onKey && !needs(c)) {
+            notice(Lang.tr("steincombat.refill.full"));
+            done(c);
+            return;
+        }
+        // Never over one of the player's inventory screens: the chest would take its place.
+        if (!Inventory.isContainerOpen() && !Inventory.isScreenOpen() && needs(c)) {
+            if (!c.refillShowWindow) {
+                // The chest comes virtual: open on the server, with no screen on the client — not
+                // even a flicker.
+                Inventory.openVirtualNext(3000);
+            }
+            Chat.send(c.refillCommand.trim());
+            log("command sent: " + c.refillCommand.trim());
+            state = State.WAITING;
+            timer = OPEN_TIMEOUT;
+        }
+    }
+
+    private void waiting(CombatConfig c) {
+        if (Inventory.isContainerOpen()) {
+            if (!c.refillShowWindow && Inventory.isScreenOpen()) {
+                // The virtual one did not take (another way of opening): hide it.
+                Inventory.hideContainerScreen();
+            }
+            log(
+                    "chest open: "
+                            + Inventory.containerSize()
+                            + " slots, window "
+                            + (c.refillShowWindow ? "in view" : "hidden"));
+            state = State.WORKING;
+            windowId = Inventory.windowId();
+            timer = SESSION_TIMEOUT;
+            stepWait = STEP_TICKS;
+            moved = 0;
+            startSpares = ArmorSlots.totalSpares(c);
+            stuck = 0;
+            resyncs = 0;
+            awaiting = 0;
+            dirty = false;
+            lastFrom = -1;
+            bagFull = false;
+            depositBlocked = false;
+        } else if (--timer <= 0) {
+            Inventory.openVirtualNext(0);
+            log(
+                    "the chest did not open (window "
+                            + Inventory.windowId()
+                            + ", screen "
+                            + Inventory.isScreenOpen()
+                            + ")");
+            notice(Lang.tr("steincombat.refill.noChest"));
+            state = State.IDLE;
+            cooldown = 200;
+            done(c);
         }
     }
 
     private void work(CombatConfig c) {
         if (!Inventory.isContainerOpen() || Inventory.windowId() != windowId) {
-            if (Inventory.isScreenOpen() || Inventory.windowId() != windowId) {
-                // O jogador abriu o inventario (ou outra janela) por cima do bau escondido: o cliente ja trocou de
-                // janela, o servidor ainda acha que o bau esta aberto e recusaria os cliques do jogador. Fecha o bau
-                // la, sem mexer na tela dele; a busca volta quando ele fechar.
-                Inventory.closeWindowOnServer(windowId);
-                log("o jogador abriu outra janela: bau fechado no servidor (janela " + Inventory.windowId() + " em vez de "
-                        + windowId + ", tela " + Inventory.isScreenOpen() + ")");
-                state = State.IDLE;
-                cooldown = 20;
-                verifyIn = VERIFY_TICKS;
-                done(c);
-                return;
-            }
-            log("o servidor fechou o bau");
-            state = State.IDLE;   // o servidor fechou
-            cooldown = 40;
-            verifyIn = VERIFY_TICKS;
-            done(c);
+            closedUnderneath(c);
             return;
         }
         if (--timer <= 0) {
@@ -234,7 +266,7 @@ final class AutoRefill {
         }
         if (awaiting > 0) {
             if (--awaiting == 0) {
-                log("o conteudo pedido nao chegou");   // segue com o que o cliente tem
+                log("the requested contents did not arrive"); // go on with what the client has
             }
             return;
         }
@@ -252,109 +284,162 @@ final class AutoRefill {
             dirty = true;
             if (++stuck >= STUCK_STEPS) {
                 stuck = 0;
-                if (!resync("passos sem efeito")) {
-                    finish(false);   // conferiu o que podia e o servidor continua recusando
+                if (!resync("steps with no effect")) {
+                    finish(false); // checked what it could and the server keeps refusing
                 }
             }
             return;
         }
-        // O bau abriu, mas os itens chegam num pacote depois: vazio nos primeiros ticks e esperar, nao "acabou".
-        if (moved == 0 && SESSION_TIMEOUT - timer < 20 && chestEmpty()) {
+        // The chest opened, but the items come in a packet afterwards: empty in the first ticks
+        // means wait, not "done".
+        if (moved == 0 && SESSION_TIMEOUT - timer < 20 && ArmorSlots.chestEmpty()) {
             return;
         }
-        // Nada mais a fazer pelo que o cliente ve. Se houve clique desde a ultima conferencia, confere antes de
-        // fechar: o servidor pode ter desfeito algum sem avisar.
-        if (dirty && resync("conferir antes de fechar")) {
+        // Nothing more to do by what the client sees. If there was a click since the last check,
+        // check before closing: the server may have silently undone one.
+        if (dirty && resync("check before closing")) {
             dirty = false;
             return;
         }
         finish(true);
     }
 
-    /** Pede o conteudo de verdade do bau e da bolsa; false se as conferencias da ida acabaram. */
+    /**
+     * The chest is no longer the open window: the player opened another one, or the server closed
+     * it.
+     */
+    private void closedUnderneath(CombatConfig c) {
+        if (Inventory.isScreenOpen() || Inventory.windowId() != windowId) {
+            // The player opened the inventory (or another window) over the hidden chest: the client
+            // already switched windows, the server still thinks the chest is open and would refuse
+            // the player's clicks. Close the chest there, without touching their screen; the trip
+            // comes back when they close it.
+            Inventory.closeWindowOnServer(windowId);
+            log(
+                    "the player opened another window: chest closed on the server (window "
+                            + Inventory.windowId()
+                            + " instead of "
+                            + windowId
+                            + ", screen "
+                            + Inventory.isScreenOpen()
+                            + ")");
+            state = State.IDLE;
+            cooldown = 20;
+            verifyIn = VERIFY_TICKS;
+            done(c);
+            return;
+        }
+        log("the server closed the chest");
+        state = State.IDLE;
+        cooldown = 40;
+        verifyIn = VERIFY_TICKS;
+        done(c);
+    }
+
+    /** Asks for the real contents of the chest and the bag; false if the trip's checks ran out. */
     private boolean resync(String why) {
         if (resyncs >= MAX_RESYNCS || !Inventory.resync()) {
             return false;
         }
         resyncs++;
         awaiting = RESYNC_TIMEOUT;
-        log("conteudo pedido ao servidor: " + why);
+        log("contents asked from the server: " + why);
         return true;
     }
 
-    /** Um passo: devolve o item do cursor, traz (ou troca) uma armadura, ou guarda uma gasta. */
+    /** One step: returns the cursor's item, brings (or swaps) one piece, or stores a worn one. */
     private int step(CombatConfig c) {
         if (Inventory.cursor() != null) {
             int to = placeForCursor();
-            log("item no cursor volta para o slot " + to);
+            log("item on the cursor goes back to slot " + to);
             if (to < 0) {
                 return STUCK;
             }
             Inventory.pickup(to);
             return Inventory.cursor() == null ? ACTED : STUCK;
         }
-        int free = freeSlot();
-        for (int piece : neediestFirst(c)) {
+        int free = ArmorSlots.freeSlot();
+        for (int piece : ArmorSlots.neediestFirst(c)) {
             AutoArmor.Rule r = c.armorRule(piece);
-            if (r.mode == AutoArmor.OFF || AutoArmor.spares(piece, r) >= Math.max(1, c.refillTarget)) {
+            if (r.mode == AutoArmor.OFF
+                    || AutoArmor.spares(piece, r) >= Math.max(1, c.refillTarget)) {
                 continue;
             }
-            int from = bestInChest(piece, r);
+            int from = ArmorSlots.bestInChest(piece, r);
             if (from < 0) {
                 continue;
             }
-            // Com uma gasta na bolsa, troca: a do bau no lugar dela e ela no lugar da do bau. So com "guardar as
-            // gastas" ligado ou sem espaco na bolsa — sem isso, a gasta e do jogador e fica com ele.
-            int give = c.refillDeposit || free < 0 ? worn(c, piece) : -1;
+            // With a worn piece in the bag, swap: the chest's one in its place and it in the
+            // chest's place. Only with "return worn pieces" on or no space in the bag — otherwise
+            // the worn piece belongs to the player and stays.
+            int give = c.refillDeposit || free < 0 ? ArmorSlots.worn(c, piece) : -1;
             lastFrom = from;
             if (give >= 0) {
-                int to = Inventory.slotOf(give);
-                log("troca a peca " + piece + ": bau " + from + " <-> bolsa " + to);
-                if (to < 0 || !Inventory.pickup(from)) {
-                    return STUCK;
-                }
-                Inventory.pickup(to);
-                Inventory.pickup(from);
-                boolean ok = Inventory.cursor() == null && AutoArmor.usable(Inventory.stack(give), piece, r);
-                if (ok) {
-                    moved++;
-                }
-                return ok ? ACTED : STUCK;
+                return swapIn(piece, r, from, give);
             }
             if (free < 0) {
-                bagFull = true;   // bolsa cheia e nenhuma gasta para trocar: esta peca fica sem
+                bagFull = true; // full bag and no worn piece to swap: this piece goes without
                 continue;
             }
-            int to = Inventory.slotOf(free);
-            log("puxa a peca " + piece + " do slot " + from + " para " + to);
-            if (to < 0 || !Inventory.pickup(from)) {
-                return STUCK;
-            }
-            Inventory.pickup(to);
-            boolean ok = Inventory.cursor() == null && Inventory.stack(free) != null;
-            if (ok) {
-                moved++;
-            }
-            return ok ? ACTED : STUCK;
+            return pullIn(piece, from, free);
         }
-        // Nada a trazer: as gastas que sobraram vao para o bau, se ele tiver lugar.
+        // Nothing to bring: the leftover worn pieces go to the chest, if it has room.
         if (c.refillDeposit && !depositBlocked) {
-            int g = worn(c, -1);
+            int g = ArmorSlots.worn(c, -1);
             if (g >= 0) {
-                if (chestFree() < 0) {
-                    depositBlocked = true;
-                    log("bau cheio: as gastas que sobraram ficam na bolsa");
-                    return NOTHING;
-                }
-                int slot = Inventory.slotOf(g);
-                log("guarda a gasta do slot " + slot);
-                if (slot < 0 || !Inventory.quickMove(slot)) {
-                    return STUCK;
-                }
-                return Inventory.stack(g) == null ? ACTED : STUCK;
+                return deposit(g);
             }
         }
         return NOTHING;
+    }
+
+    /**
+     * The chest's piece into the worn one's place, and the worn one into the chest: three clicks.
+     */
+    private int swapIn(int piece, AutoArmor.Rule r, int from, int give) {
+        int to = Inventory.slotOf(give);
+        log("swaps piece " + piece + ": chest " + from + " <-> bag " + to);
+        if (to < 0 || !Inventory.pickup(from)) {
+            return STUCK;
+        }
+        Inventory.pickup(to);
+        Inventory.pickup(from);
+        boolean ok =
+                Inventory.cursor() == null && AutoArmor.usable(Inventory.stack(give), piece, r);
+        if (ok) {
+            moved++;
+        }
+        return ok ? ACTED : STUCK;
+    }
+
+    /** The chest's piece into a free space of the bag: two clicks. */
+    private int pullIn(int piece, int from, int free) {
+        int to = Inventory.slotOf(free);
+        log("pulls piece " + piece + " from slot " + from + " to " + to);
+        if (to < 0 || !Inventory.pickup(from)) {
+            return STUCK;
+        }
+        Inventory.pickup(to);
+        boolean ok = Inventory.cursor() == null && Inventory.stack(free) != null;
+        if (ok) {
+            moved++;
+        }
+        return ok ? ACTED : STUCK;
+    }
+
+    /** A leftover worn piece into the chest, with a shift-click. */
+    private int deposit(int g) {
+        if (ArmorSlots.chestFree() < 0) {
+            depositBlocked = true;
+            log("chest full: the leftover worn pieces stay in the bag");
+            return NOTHING;
+        }
+        int slot = Inventory.slotOf(g);
+        log("stores the worn piece of slot " + slot);
+        if (slot < 0 || !Inventory.quickMove(slot)) {
+            return STUCK;
+        }
+        return Inventory.stack(g) == null ? ACTED : STUCK;
     }
 
     private void finish(boolean done) {
@@ -363,23 +448,34 @@ final class AutoRefill {
             for (int i = 0; i < Inventory.containerSize(); i++) {
                 n += Inventory.slotStack(i) != null ? 1 : 0;
             }
-            log("bau com " + n + " itens, janela " + Inventory.windowId() + ", livre " + freeSlot());
+            log(
+                    "chest with "
+                            + n
+                            + " items, window "
+                            + Inventory.windowId()
+                            + ", free "
+                            + ArmorSlots.freeSlot());
         }
-        log("fecha: " + moved + " trazidas, " + (done ? "terminou" : "tempo esgotado ou recusado"));
+        log("closes: " + moved + " brought, " + (done ? "finished" : "timed out or refused"));
         Inventory.closeContainer();
         state = State.IDLE;
         verifyIn = VERIFY_TICKS;
         if (moved > 0) {
-            notice(Lang.tr("steincombat.refill.done", Math.max(0, totalSpares(mod.config) - startSpares)));
+            notice(
+                    Lang.tr(
+                            "steincombat.refill.done",
+                            Math.max(0, ArmorSlots.totalSpares(mod.config) - startSpares)));
             failStreak = 0;
             cooldown = 40;
         } else if (done) {
-            // Nada para trazer (o bau sem armadura que sirva, ou a bolsa cheia): espera mais antes de tentar de novo.
+            // Nothing to bring (the chest without fitting armor, or the bag full): wait longer
+            // before trying again.
             notice(Lang.tr(bagFull ? "steincombat.refill.bagFull" : "steincombat.refill.empty"));
             failStreak = 0;
             cooldown = 1200;
         } else {
-            // Tempo esgotado ou o servidor recusando: a espera dobra a cada ida assim, de 10 s ate 80 s, sem parar.
+            // Timed out or the server refusing: the wait doubles with each such trip, from 10 s to
+            // 80 s, without stopping.
             notice(Lang.tr("steincombat.refill.timeout"));
             cooldown = 200 << Math.min(failStreak, 3);
             failStreak++;
@@ -387,7 +483,10 @@ final class AutoRefill {
         done(mod.config);
     }
 
-    /** No modo na tecla, a ida acabou (trouxe, nao achou ou nao abriu): o Auto Refill se desliga sozinho. */
+    /**
+     * In on-key mode, the trip is over (brought, found nothing or did not open): Auto Refill turns
+     * itself off.
+     */
     private void done(CombatConfig c) {
         if (c.refillMode == ON_KEY && c.autoRefill) {
             c.autoRefill = false;
@@ -396,29 +495,9 @@ final class AutoRefill {
     }
 
     /**
-     * As pecas da que tem menos reservas para a que tem mais (no empate, do capacete as botas): cada peca ganha uma
-     * reserva antes de alguma ganhar a segunda — com poucas gastas para trocar, nenhuma peca fica sem.
+     * Needs a spare of some piece turned on? (zero, in when-empty mode; below the target, in
+     * constant and on key)
      */
-    private static Integer[] neediestFirst(CombatConfig c) {
-        Integer[] order = {Inventory.HELMET, Inventory.CHESTPLATE, Inventory.LEGGINGS, Inventory.BOOTS};
-        int[] spares = new int[4];
-        for (int piece = 0; piece < 4; piece++) {
-            spares[piece] = AutoArmor.spares(piece, c.armorRule(piece));
-        }
-        java.util.Arrays.sort(order, (a, b) -> Integer.compare(spares[a], spares[b]));   // estavel: o empate fica
-        return order;
-    }
-
-    /** As reservas que servem, somadas as quatro pecas. */
-    private static int totalSpares(CombatConfig c) {
-        int n = 0;
-        for (int piece = 0; piece < 4; piece++) {
-            n += AutoArmor.spares(piece, c.armorRule(piece));
-        }
-        return n;
-    }
-
-    /** Falta reserva de alguma peca ligada? (zero, no modo de quando acabar; abaixo do alvo, no constante e na tecla) */
     private static boolean needs(CombatConfig c) {
         for (int piece = Inventory.HELMET; piece >= Inventory.BOOTS; piece--) {
             AutoArmor.Rule r = c.armorRule(piece);
@@ -434,108 +513,37 @@ final class AutoRefill {
     }
 
     /**
-     * Uma armadura gasta da bolsa ou da hotbar (no limite da regra dela): a da peca pedida primeiro, depois qualquer
-     * uma; -1 sem nenhuma. {@code piece} -1 aceita qualquer peca.
+     * Where the item left on the cursor goes: its chest slot, another empty chest slot, or one in
+     * the bag.
      */
-    private static int worn(CombatConfig c, int piece) {
-        int any = -1;
-        for (int i = 0; i < Inventory.ARMOR_START; i++) {
-            Object s = Inventory.stack(i);
-            int p = s == null ? -1 : Inventory.armorPiece(s);
-            if (p < 0 || !Stacks.isDamageable(s)) {
-                continue;
-            }
-            if (Stacks.maxDamage(s) - Stacks.damage(s) <= c.armorRule(p).threshold) {
-                if (piece < 0 || p == piece) {
-                    return i;
-                }
-                if (any < 0) {
-                    any = i;
-                }
-            }
-        }
-        return any;
-    }
-
-    /** Para onde vai o item que ficou no cursor: o slot do bau de onde veio, outro vazio do bau, ou um da bolsa. */
     private int placeForCursor() {
-        if (lastFrom >= 0 && lastFrom < Inventory.containerSize() && Inventory.slotStack(lastFrom) == null) {
+        if (lastFrom >= 0
+                && lastFrom < Inventory.containerSize()
+                && Inventory.slotStack(lastFrom) == null) {
             return lastFrom;
         }
-        int chest = chestFree();
+        int chest = ArmorSlots.chestFree();
         if (chest >= 0) {
             return chest;
         }
-        int free = freeSlot();
+        int free = ArmorSlots.freeSlot();
         return free < 0 ? -1 : Inventory.slotOf(free);
     }
 
-    /** O slot do bau com a armadura da peca que a regra escolhe (maior ou menor protecao). */
-    private static int bestInChest(int piece, AutoArmor.Rule r) {
-        int size = Inventory.containerSize();
-        int best = -1;
-        long bestScore = 0;
-        for (int slot = 0; slot < size; slot++) {
-            Object s = Inventory.slotStack(slot);
-            if (!AutoArmor.usable(s, piece, r)) {
-                continue;
-            }
-            long score = AutoArmor.score(s);
-            if (best < 0 || (r.highest ? score > bestScore : score < bestScore)) {
-                best = slot;
-                bestScore = score;
-            }
-        }
-        return best;
-    }
-
-    /** Um slot vazio do bau; -1 se ele esta cheio. */
-    private static int chestFree() {
-        for (int i = 0; i < Inventory.containerSize(); i++) {
-            if (Inventory.slotStack(i) == null) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private static boolean chestEmpty() {
-        for (int i = 0; i < Inventory.containerSize(); i++) {
-            if (Inventory.slotStack(i) != null) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** Um espaco livre da bolsa (9 a 35); sem nenhum, um da hotbar. */
-    private static int freeSlot() {
-        for (int i = Inventory.MAIN_START; i < Inventory.ARMOR_START; i++) {
-            if (Inventory.stack(i) == null) {
-                return i;
-            }
-        }
-        for (int i = 0; i < Inventory.MAIN_START; i++) {
-            if (Inventory.stack(i) == null) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private static void log(String text) {
+    private void log(String text) {
         if (DEBUG) {
-            System.out.println("[refill] " + text);
+            mod.log().info("[refill] " + text);
         }
     }
 
     /**
-     * O que aconteceu (sem item, troca feita, bau vazio...). Fora da action bar: la so aparece ligar e desligar
-     * (pedido do usuario); com {@code -Dsteincombat.debugNotices=true}, no log.
+     * What happened (no item, swap done, empty chest...). Not on the action bar: only turning on
+     * and off shows there (the user's request); with {@code -Dsteincombat.debugNotices=true}, in
+     * the log.
      */
-    private static void notice(String text) {
+    private void notice(String text) {
         if (NOTICES) {
-            System.out.println("[Auto Refill] " + text);
+            mod.log().info("[Auto Refill] " + text);
         }
     }
 }

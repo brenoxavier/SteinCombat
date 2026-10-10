@@ -1,0 +1,3 @@
+// The server plugin is a build of its own (Spigot 1.8.8, Java 8), next to the mod's: from the repository root,
+// ./gradlew -p plugin build (the root's Gradle wrapper).
+rootProject.name = 'SteinCombat'

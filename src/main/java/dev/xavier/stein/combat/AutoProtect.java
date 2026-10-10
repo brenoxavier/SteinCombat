@@ -1,72 +1,91 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Copyright (c) 2026 Breno Xavier
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
  */
 
 package dev.xavier.stein.combat;
 
 import dev.xavier.stein.loader.api.Entities;
-import dev.xavier.stein.loader.api.Lang;
 import dev.xavier.stein.loader.api.Screens;
 
 /**
- * Auto Protect: a espada defendendo sozinha. Duas partes, cada uma com a sua chave, debaixo da chave do Auto Protect:
+ * Auto Protect: the sword blocking by itself. Two parts, each with its own switch, under Auto
+ * Protect's switch:
  *
  * <ul>
- *   <li><b>Defender</b>: com uma tela aberta (inventario, chat, Painel), a espada na mao e defendendo — quem mexe no
- *       inventario no meio da briga nao fica parado de braco abaixado;
- *   <li><b>Segurar a vida</b>: com a vida no limite ({@link CombatConfig#protectLowHealth}) no meio da luta, a espada
- *       defendendo ate a vida voltar ({@link CombatConfig#protectResumeHealth}). Defendendo, o golpe nao sai — o jogo
- *       nao bate com o item em uso, nem com o autoclick —, entao no grude o jogador para de tomar o contra-ataque do
- *       mcMMO (que devolve o dano de quem bate) e leva metade do dano de quem bate nele.
+ *   <li><b>Block in menus</b>: with a screen open (inventory, chat, Panel), the sword in hand and
+ *       blocking — whoever handles the inventory in the middle of a fight does not stand there with
+ *       the arm down;
+ *   <li><b>Low health block</b>: with health at the limit ({@link CombatConfig#protectLowHealth})
+ *       in a fight, the sword blocking until health is back ({@link
+ *       CombatConfig#protectResumeHealth}). While blocking the hit does not go out — the game does
+ *       not hit with an item in use, nor with the autoclick —, so at close range the player stops
+ *       taking mcMMO's counterattack (which returns the damage of whoever hits) and takes half the
+ *       damage of whoever hits them.
  * </ul>
  *
- * <p><b>A dinamica do "Segurar a vida"</b>, com duas marcas de vida (histerese):
+ * <p><b>How "Low health block" behaves</b>, with two health marks (hysteresis):
+ *
  * <ul>
- *   <li>entra com a vida na marca de baixo ou abaixo, em luta (dano nos ultimos 3 segundos ou um inimigo — quem nao e
- *       aliado nem do meu cla — a ate 6 blocos) e com uma espada no inventario;
- *   <li>entrou, fica ate a vida chegar a marca de cima (ou ao maximo de vida, se ele for menor). Enquanto isso, a
- *       espada defende quando ha luta, e Velocidade e Forca do Smart Effect esperam — primeiro a vida, depois as
- *       pocoes. Sem luta (o inimigo foi embora), a espada baixa — da para fugir correndo —, mas as pocoes continuam
- *       esperando a vida;
- *   <li>o jogador trocou de posicao na hotbar no meio da defesa (a roda ou a tecla numerica): e ele que manda — a
- *       espada baixa por 3 segundos, e volta depois disso se a vida ainda estiver baixa.
+ *   <li>enters with health at the low mark or below, in a fight (damage in the last 3 seconds or an
+ *       enemy — neither ally nor in my clan — within 6 blocks) and with a sword in the inventory;
+ *   <li>once in, stays until health reaches the high mark (or the maximum health, if lower).
+ *       Meanwhile the sword blocks while there is a fight, and Smart Effect's Speed and Strength
+ *       wait — health first, then the potions. With no fight (the enemy left), the sword goes down
+ *       — the player can run away —, but the potions keep waiting for health;
+ *   <li>the player switched hotbar slots in the middle of blocking (wheel or number key): they are
+ *       in charge — the sword goes down for 3 seconds, and comes back after that if health is still
+ *       low.
  * </ul>
  *
- * <p><b>A ordem com o resto</b> (a mao e a tecla de usar tem um dono so, o {@link SmartEffect}, que pergunta aqui o
- * que fazer): armadura (Auto Armor), Regeneracao (a maca), as defesas daqui, e so depois Velocidade e Forca. A
- * Regeneracao vem antes de defender: comer a maca e o que traz a vida de volta, e defender e o que segura ate ela
- * vir. Faltando a Regeneracao, a espada baixa para comer e volta a defender no fim. O Auto Refill nao mexe na mao (so
- * na bolsa, pelo bau virtual) e segue junto; com o bau dele aberto, a espada so e procurada na hotbar.
+ * <p><b>The order with the rest</b> (the hand and the use key have a single owner, {@link
+ * SmartEffect}, which asks here what to do): armor (Auto Armor), Regeneration (the apple), the
+ * blocking from here, and only then Speed and Strength. Regeneration comes before blocking: eating
+ * the apple is what brings health back, and blocking is what holds until it comes. When
+ * Regeneration is missing, the sword goes down to eat and blocks again at the end. Auto Refill does
+ * not touch the hand (only the bag, through the virtual chest) and goes on alongside; with its
+ * chest open, the sword is only looked for on the hotbar.
  */
 final class AutoProtect {
 
-    /** Depois de levar dano, por quantos ticks ainda e luta (3 segundos). */
+    /** After taking damage, for how many ticks it is still a fight (3 seconds). */
     private static final int COMBAT_WINDOW = 60;
-    /** Um inimigo ate esta distancia e luta. */
+
+    /** An enemy within this distance is a fight. */
     private static final int ENEMY_RADIUS = 6;
-    /** Quanto a espada fica baixa quando o jogador troca de posicao no meio da defesa (3 segundos). */
+
+    /**
+     * How long the sword stays down when the player switches slots in the middle of blocking (3
+     * seconds).
+     */
     private static final int OVERRIDE_TICKS = 60;
 
     private final SteinCombat mod;
-    /** "Segurar a vida" agindo: entrou abaixo da marca de baixo e ainda nao chegou a de cima. */
+
+    /**
+     * "Low health block" acting: entered below the low mark and has not reached the high one yet.
+     */
     private boolean holding;
-    /** Ticks que ainda contam como luta depois do ultimo dano. */
+
+    /** Ticks that still count as a fight after the last damage. */
     private int combatTicks;
+
     private float lastHealth = -1;
-    /** Ticks de espada baixa porque o jogador trocou de posicao. */
+
+    /** Ticks of the sword down because the player switched slots. */
     private int override;
-    /** Luta agora (calculado uma vez por tick). */
+
+    /** A fight now (computed once per tick). */
     private boolean fighting;
 
     AutoProtect(SteinCombat mod) {
         this.mod = mod;
     }
 
-    /** No comeco do tick do Smart Effect, antes de decidir a mao: a vida, a luta e a marca de entrar e sair. */
+    /**
+     * At the start of Smart Effect's tick, before deciding the hand: health, the fight and the
+     * marks.
+     */
     void tick(Object me) {
         CombatConfig c = mod.config;
         if (me == null || !Entities.isAlive(me)) {
@@ -90,7 +109,7 @@ final class AutoProtect {
         }
         fighting = combatTicks > 0 || SmartEffect.enemyNear(me, ENEMY_RADIUS);
         if (!holding) {
-            if (h <= c.protectLowHealth && fighting && SmartEffect.hasSword()) {
+            if (h <= c.protectLowHealth && fighting && HandItems.hasSword()) {
                 holding = true;
             }
         } else if (h >= Math.min(c.protectResumeHealth, Entities.maxHealth(me))) {
@@ -99,28 +118,31 @@ final class AutoProtect {
         }
     }
 
-    /** "Defender": a chave ligada e uma tela aberta. */
+    /** "Block in menus": the switch on and a screen open. */
     boolean defend() {
         CombatConfig c = mod.config;
         return c.autoProtect && c.protectDefend && Screens.isOpen();
     }
 
-    /** "Segurar a vida" quer a espada defendendo agora: agindo, em luta e sem o jogador ter tomado a mao. */
+    /**
+     * "Low health block" wants the sword blocking now: acting, in a fight and without the player
+     * taking the hand.
+     */
     boolean survive() {
         return holding && fighting && override == 0;
     }
 
-    /** Alguma das duas quer a espada defendendo agora. */
+    /** Either part wants the sword blocking now. */
     boolean wantsBlock() {
         return defend() || survive();
     }
 
-    /** "Segurar a vida" agindo (mesmo sem luta agora): Velocidade e Forca esperam a vida voltar. */
+    /** "Low health block" acting (even with no fight now): Speed and Strength wait for health. */
     boolean holdsBack() {
         return holding;
     }
 
-    /** O jogador trocou de posicao no meio da defesa: a espada baixa por um tempo. */
+    /** The player switched slots in the middle of blocking: the sword goes down for a while. */
     void playerTookHand() {
         override = OVERRIDE_TICKS;
     }

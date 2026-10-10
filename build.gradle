@@ -1,0 +1,55 @@
+// Built like any Stein mod, with the Stein SDK's Gradle plugin:
+//
+//   ./gradlew build           build/libs/<Name>.steinmod, after checking the formatting
+//   ./gradlew installMod      build, then copy into .minecraft/mods
+//   ./gradlew spotlessApply   format the Java code (google-java-format, AOSP style) and add the licence header
+//
+// Before an SDK release, build against a local SDK (the sdk repository, built with "./gradlew build publishPlugin"):
+//
+//   ./gradlew build -Pstein.sdkDir=../stein-project/sdk
+//
+// The server plugin in plugin/ is a build of its own: ./gradlew -p plugin build (see plugin/build.gradle).
+plugins {
+    id 'dev.xavier.stein.mod' version '0.2.3'
+    id 'com.diffplug.spotless' version '8.10.4'
+}
+
+repositories {
+    // google-java-format, for spotless.
+    mavenCentral()
+}
+
+def localSdk = providers.gradleProperty('stein.sdkDir')
+if (localSdk.present) {
+    def jar = file("${localSdk.get()}/build/sdk/stein-sdk.jar")
+    if (!jar.isFile()) {
+        throw new GradleException("no $jar: run \"./gradlew build publishPlugin\" in ${localSdk.get()} first")
+    }
+    stein { sdkJar = jar }
+}
+
+// Combat calls the Loader's engine switches in dev.xavier.stein.loader.internal.Combat (sprint in all directions,
+// no hit delay, keep sprint), which only the official mods call and which stein-api.jar leaves out. The mod compiles
+// against the signatures in src/stubs; the real class is the Loader's, in the game. Nothing of src/stubs goes into
+// the .steinmod (the steinmod task packs only the classes of the main source set).
+sourceSets {
+    stubs
+}
+dependencies {
+    compileOnly sourceSets.stubs.output
+}
+
+spotless {
+    // LF everywhere, as committed (.editorconfig); Windows checkouts too.
+    lineEndings = com.diffplug.spotless.LineEnding.UNIX
+    java {
+        target 'src/**/*.java'
+        googleJavaFormat('1.36.1').aosp().reorderImports(true)
+        licenseHeader '''/*
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
+ */
+
+'''
+    }
+}

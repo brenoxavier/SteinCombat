@@ -1,9 +1,6 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Copyright (c) 2026 Breno Xavier
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
  */
 
 package dev.xavier.stein.combat;
@@ -13,45 +10,64 @@ import dev.xavier.stein.loader.api.Keys;
 import dev.xavier.stein.loader.api.Screens;
 
 /**
- * Autoclick: cliques no ritmo escolhido ({@link CombatConfig#autoclickCps}), segurando o botao esquerdo (o padrao) ou
- * constante, sem segurar nada, enquanto estiver ligado ({@link CombatConfig#autoclickMode}).
+ * Autoclick: clicks at the chosen rate ({@link CombatConfig#autoclickCps}), while holding the left
+ * button (the default) or constant, without holding anything, while it is on ({@link
+ * CombatConfig#autoclickMode}).
  *
- * <p><b>Como um autoclick de fora:</b> cada clique e um aperto e uma soltura na fila de eventos do mouse
- * ({@link Keys#click}), a mesma em que o mouse fisico poe os dele. O jogo os le no tick seguinte, na ordem com os
- * outros: o golpe ou o bloco, o braco, os pacotes na ordem de sempre, o atraso de golpe do proprio jogo e o contador
- * de CPS do HUD (que conta os eventos). Nada de golpe chamado por fora. Segurando, o botao fisico continua apertado
- * para o jogo saber que o dedo esta la; o aperto de verdade ja e um clique, e o primeiro daqui vem um intervalo depois.
+ * <p><b>Like an external autoclicker:</b> each click is a press and a release in the mouse event
+ * queue ({@link Keys#click}), the same one the physical mouse feeds. The game reads them in the
+ * next tick, in order with the others: the hit or the block, the arm, the packets in the usual
+ * order, the game's own hit delay and the HUD's CPS counter (which counts the events). No hit
+ * called from outside. While holding, the physical button stays pressed so the game knows the
+ * finger is there; the real press is already a click, and the first one from here comes one
+ * interval later.
  *
- * <p><b>Ritmo:</b> a hora de cada clique sai do relogio (nanoTime), conferida a cada quadro: a CPS fica a escolhida
- * com qualquer FPS, sem variacao nenhuma; com mais de um clique por tick (CPS acima de 20), o jogo processa os do tick
- * um depois do outro, como faria com os do mouse. Uma travada (quadro preso, recarga) nao vira rajada: o ritmo
- * recomeca de onde esta.
+ * <p><b>Rate:</b> each click's time comes from the clock (nanoTime), checked every frame: the CPS
+ * is the chosen one at any FPS, with no variation at all; with more than one click per tick (CPS
+ * above 20), the game processes the tick's clicks one after the other, as it would the mouse's. A
+ * stall (a stuck frame, a reload) does not become a burst: the rate starts over from where it is.
  *
- * <p><b>Quando:</b> so sem tela aberta, e por ultimo na ordem do Combat — espera a armadura (Auto Armor), o refil
- * (Auto Refill), a comida e as pocoes (Smart Effect) e a espada defendendo (Auto Protect): enquanto eles mexem na mao
- * ou no inventario, nao sai clique (o golpe iria com o item errado, no meio de uma troca).
+ * <p><b>When:</b> only with no screen open, and last in Combat's order — it waits for armor (Auto
+ * Armor), the refill (Auto Refill), food and potions (Smart Effect) and the blocking sword (Auto
+ * Protect): while they handle the hand or the inventory, no click goes out (the hit would go with
+ * the wrong item, in the middle of a swap).
  */
 final class Autoclick {
 
-    /** Um atraso maior que isto (travada) recomeca o ritmo, em vez de mandar os cliques atrasados de uma vez. */
+    /**
+     * A delay longer than this (a stall) restarts the rate, instead of sending the late clicks at
+     * once.
+     */
     private static final long STALL_NS = 100_000_000L;
-    /** No maximo tantos cliques num quadro (FPS muito baixo com CPS alta): o resto do atraso e perdoado. */
+
+    /**
+     * At most this many clicks in one frame (very low FPS with high CPS): the rest of the delay is
+     * forgiven.
+     */
     private static final int MAX_PER_FRAME = 8;
 
     private final SteinCombat mod;
-    /** A hora (nanoTime) do proximo clique; 0: parado (o dedo nao esta no botao, ou algo esta na frente). */
+
+    /**
+     * The time (nanoTime) of the next click; 0: stopped (the finger is not on the button, or
+     * something is ahead).
+     */
     private long next;
 
     Autoclick(SteinCombat mod) {
         this.mod = mod;
     }
 
-    /** A cada quadro, no fio do jogo. */
+    /** Every frame, on the game thread. */
     void frame() {
         CombatConfig c = mod.config;
         boolean always = c.autoclickMode == 1;
         boolean trigger = always || Keys.isMouseDown(0);
-        if (!c.autoclick || Screens.isOpen() || Entities.self() == null || !trigger || mod.handBusy()) {
+        if (!c.autoclick
+                || Screens.isOpen()
+                || Entities.self() == null
+                || !trigger
+                || mod.handBusy()) {
             next = 0;
             return;
         }
@@ -59,7 +75,7 @@ final class Autoclick {
         long interval = 1_000_000_000L / Math.max(1, c.autoclickCps);
         if (next == 0) {
             if (!always) {
-                next = now + interval;   // segurando: o aperto de verdade e o primeiro clique
+                next = now + interval; // holding: the real press is the first click
                 return;
             }
             next = now;

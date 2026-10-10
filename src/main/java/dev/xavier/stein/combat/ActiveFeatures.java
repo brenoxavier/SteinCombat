@@ -1,43 +1,58 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Copyright (c) 2026 Breno Xavier
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
  */
 
 package dev.xavier.stein.combat;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import dev.xavier.stein.loader.api.HudElement;
 import dev.xavier.stein.loader.api.HudPlacement;
 import dev.xavier.stein.loader.api.Lang;
 import dev.xavier.stein.loader.api.Option;
 import dev.xavier.stein.loader.api.Render;
 
+import java.awt.Color;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
- * A lista das funcionalidades do Combat ligadas agora, na grade do HUD: uma linha por funcionalidade, com o nome dela
- * (o mesmo do Painel), uma barra de destaque do lado da borda e um fundo escuro. As cores sao as da categoria
- * ({@link Features#COLORS}: combate, movimento, equipe, automacao), um arco-iris que corre pela lista, ou uma cor so.
+ * The list of Combat's features that are on now, on the HUD grid: one line per feature, with its
+ * name (the same as in the Panel), an accent bar on the edge side and a dark background. The colors
+ * are the category's ({@link Features#COLORS}: combat, movement, team, automation), a rainbow that
+ * runs down the list, or a single color.
  *
- * <p>Ligar e desligar anima: a linha entra deslizando da borda e sai do mesmo jeito, e as outras se ajeitam. Cada
- * funcionalidade pode ficar fora da lista ("Mostrar na lista", no Painel). Sem nada ligado, o elemento some.
+ * <p>Turning on and off animates: the line slides in from the edge and out the same way, and the
+ * others settle. Each feature can stay out of the list ("Show in list", in the Panel). With nothing
+ * on, the element disappears.
  */
 final class ActiveFeatures implements HudElement {
 
     private static final int LINE = 11;
     private static final int PAD = 3;
     private static final int BAR = 2;
-    /** Segundos de uma entrada ou saida. */
+
+    /** Seconds of one entry or exit. */
     private static final float ANIM_SECONDS = 0.18F;
 
+    /** The widest line on top. */
+    private static final Comparator<Row> BY_WIDTH = (a, b) -> Integer.compare(b.width, a.width);
+
     private final SteinCombat mod;
-    /** O que esta na tela, entrando, saindo ou parado: id -> progresso (0 fora, 1 inteiro). */
+
+    /** What is on screen, coming in, going out or still: id -> progress (0 out, 1 fully in). */
     private final Map<String, Float> shown = new LinkedHashMap<>();
+
+    /** The features that should be in the list now (reused every frame). */
+    private final List<Features.Feature> want = new ArrayList<>();
+
+    /** The lines of this frame, and the pool they come from (no allocation per frame). */
     private final List<Row> rows = new ArrayList<>();
+
+    private final Row[] pool = new Row[Features.ALL.size()];
+
     private long last = System.nanoTime();
     private int w;
     private int h;
@@ -51,6 +66,9 @@ final class ActiveFeatures implements HudElement {
 
     ActiveFeatures(SteinCombat mod) {
         this.mod = mod;
+        for (int i = 0; i < pool.length; i++) {
+            pool[i] = new Row();
+        }
     }
 
     @Override
@@ -69,8 +87,9 @@ final class ActiveFeatures implements HudElement {
         float step = Math.min(1F, (now - last) / 1e9F / ANIM_SECONDS);
         last = now;
         CombatConfig c = mod.config;
-        // Quem deveria estar: ligada e nao escondida da lista (na previa do editor, duas de exemplo se nada liga).
-        List<Features.Feature> want = new ArrayList<>();
+        // Who should be there: on and not hidden from the list (in the editor's preview, two
+        // samples if nothing is on).
+        want.clear();
         for (Features.Feature f : Features.ALL) {
             if (f.on.test(mod) && !c.featuresHidden.contains(f.id)) {
                 want.add(f);
@@ -80,6 +99,39 @@ final class ActiveFeatures implements HudElement {
             want.add(Features.ALL.get(0));
             want.add(Features.byId("keepSprint"));
         }
+        animate(step);
+        rows.clear();
+        int n = 0;
+        for (Features.Feature f : Features.ALL) {
+            Float t = shown.get(f.id);
+            if (t == null) {
+                continue;
+            }
+            Row r = pool[n++];
+            r.text = Lang.tr(f.nameKey);
+            r.category = f.category;
+            r.width = Render.textWidth(r.text);
+            r.t = t;
+            rows.add(r);
+        }
+        if (rows.isEmpty()) {
+            return false;
+        }
+        if (c.featuresByWidth) {
+            rows.sort(BY_WIDTH);
+        }
+        w = 0;
+        float total = 0;
+        for (Row r : rows) {
+            w = Math.max(w, r.width + PAD * 2 + BAR);
+            total += LINE * ease(r.t);
+        }
+        h = Math.max(1, Math.round(total));
+        return true;
+    }
+
+    /** Moves each line's progress one step towards in (wanted) or out. */
+    private void animate(float step) {
         for (Features.Feature f : Features.ALL) {
             boolean in = want.contains(f);
             Float t = shown.get(f.id);
@@ -94,33 +146,6 @@ final class ActiveFeatures implements HudElement {
                 shown.put(f.id, v);
             }
         }
-        rows.clear();
-        for (Features.Feature f : Features.ALL) {
-            Float t = shown.get(f.id);
-            if (t == null) {
-                continue;
-            }
-            Row r = new Row();
-            r.text = Lang.tr(f.nameKey);
-            r.category = f.category;
-            r.width = Render.textWidth(r.text);
-            r.t = t;
-            rows.add(r);
-        }
-        if (rows.isEmpty()) {
-            return false;
-        }
-        if (c.featuresByWidth) {
-            rows.sort((a, b) -> Integer.compare(b.width, a.width));
-        }
-        w = 0;
-        float total = 0;
-        for (Row r : rows) {
-            w = Math.max(w, r.width + PAD * 2 + BAR);
-            total += LINE * ease(r.t);
-        }
-        h = Math.max(1, Math.round(total));
-        return true;
     }
 
     @Override
@@ -142,10 +167,12 @@ final class ActiveFeatures implements HudElement {
         for (int i = 0; i < rows.size(); i++) {
             Row r = rows.get(i);
             float e = ease(r.t);
-            int color = c.featuresStyle == 0 ? Features.COLORS[r.category]
-                    : c.featuresStyle == 1 ? rainbow(time, i) : fixed;
+            int color =
+                    c.featuresStyle == 0
+                            ? Features.COLORS[r.category]
+                            : c.featuresStyle == 1 ? rainbow(time, i) : fixed;
             int rowW = r.width + PAD * 2 + BAR;
-            // Entra deslizando da borda em que a lista esta presa, e fica transparente ate chegar.
+            // Slides in from the edge the list is pinned to, and is transparent until it arrives.
             float slide = (1 - e) * (rowW + 4);
             float x = alignRight ? w - rowW + slide : -slide;
             if (c.featuresBackground) {
@@ -162,10 +189,10 @@ final class ActiveFeatures implements HudElement {
         }
     }
 
-    /** Arco-iris que corre pela lista: cada linha um pouco a frente da de cima. */
+    /** A rainbow that runs down the list: each line a little ahead of the one above. */
     private static int rainbow(long time, int index) {
         float hue = ((time % 4000) / 4000F + index * 0.07F) % 1F;
-        return 0xFF000000 | (java.awt.Color.HSBtoRGB(hue, 0.55F, 1F) & 0xFFFFFF);
+        return 0xFF000000 | (Color.HSBtoRGB(hue, 0.55F, 1F) & 0xFFFFFF);
     }
 
     private static float ease(float t) {
@@ -174,33 +201,53 @@ final class ActiveFeatures implements HudElement {
 
     @Override
     public HudPlacement defaultPlacement() {
-        // Canto de cima, a direita, embaixo do minimapa.
+        // Top corner, on the right, under the minimap.
         return new HudPlacement(2, 0, -2, 72, 1.0F, true, true);
     }
 
     @Override
     public void options(List<Option> out) {
         CombatConfig c = mod.config;
-        out.add(Option.cycle(Lang.tr("steincombat.hud.featuresStyle"),
-                new String[] {Lang.tr("steincombat.hud.featuresStyle.category"),
-                    Lang.tr("steincombat.hud.featuresStyle.rainbow"), Lang.tr("steincombat.hud.featuresStyle.fixed")},
-                () -> c.featuresStyle, i -> c.featuresStyle = i));
-        out.add(Option.color(Lang.tr("steincombat.hud.featuresColor"), () -> String.valueOf(c.featuresColor),
-                v -> c.featuresColor = v.charAt(0)).visibleWhen(() -> c.featuresStyle == 2));
-        out.add(Option.toggle(Lang.tr("steincombat.hud.featuresBackground"), () -> c.featuresBackground,
-                v -> c.featuresBackground = v));
-        out.add(Option.cycle(Lang.tr("steincombat.hud.featuresOrder"),
-                new String[] {Lang.tr("steincombat.hud.featuresOrder.width"), Lang.tr("steincombat.hud.featuresOrder.fixed")},
-                () -> c.featuresByWidth ? 0 : 1, i -> c.featuresByWidth = i == 0));
+        out.add(
+                Option.cycle(
+                        Lang.tr("steincombat.hud.featuresStyle"),
+                        new String[] {
+                            Lang.tr("steincombat.hud.featuresStyle.category"),
+                            Lang.tr("steincombat.hud.featuresStyle.rainbow"),
+                            Lang.tr("steincombat.hud.featuresStyle.fixed")
+                        },
+                        () -> c.featuresStyle,
+                        i -> c.featuresStyle = i));
+        out.add(
+                Option.color(
+                                Lang.tr("steincombat.hud.featuresColor"),
+                                () -> String.valueOf(c.featuresColor),
+                                v -> c.featuresColor = v.charAt(0))
+                        .visibleWhen(() -> c.featuresStyle == 2));
+        out.add(
+                Option.toggle(
+                        Lang.tr("steincombat.hud.featuresBackground"),
+                        () -> c.featuresBackground,
+                        v -> c.featuresBackground = v));
+        out.add(
+                Option.cycle(
+                        Lang.tr("steincombat.hud.featuresOrder"),
+                        new String[] {
+                            Lang.tr("steincombat.hud.featuresOrder.width"),
+                            Lang.tr("steincombat.hud.featuresOrder.fixed")
+                        },
+                        () -> c.featuresByWidth ? 0 : 1,
+                        i -> c.featuresByWidth = i == 0));
     }
 
     @Override
     public void restoreOptions() {
         CombatConfig d = new CombatConfig();
-        mod.config.featuresColor = d.featuresColor;
-        mod.config.featuresByWidth = d.featuresByWidth;
-        mod.config.featuresStyle = d.featuresStyle;
-        mod.config.featuresBackground = d.featuresBackground;
+        CombatConfig c = mod.config;
+        c.featuresColor = d.featuresColor;
+        c.featuresByWidth = d.featuresByWidth;
+        c.featuresStyle = d.featuresStyle;
+        c.featuresBackground = d.featuresBackground;
     }
 
     @Override

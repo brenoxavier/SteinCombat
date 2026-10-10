@@ -1,112 +1,118 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Copyright (c) 2026 Breno Xavier
+ * Copyright (c) 2026 Breno Xavier. All rights reserved.
+ * Proprietary software: see the LICENSE file at the root of this repository.
  */
 
 package dev.xavier.stein.combat;
 
+import dev.xavier.stein.loader.api.Option;
+
 /**
- * O que o Stein Combat conta para outros mods (o minimapa do HUD pinta os jogadores por ela). Os mods ficam no mesmo
- * carregador de classes do Loader: quem quiser acha esta classe pelo nome, e sem o Combat ativo ela nao existe. O nome
- * e os metodos ficam fora da ofuscacao (tools/dist.sh).
- */
-/*
- * Mantida para mods compilados contra ela (o HUD ate a 0.1.6). O caminho de agora e o do Loader: api.Relations e
- * api.Players, que o Combat alimenta.
+ * What Combat tells other mods (the HUD's minimap paints players by it). Mods share the Loader's
+ * class loader: whoever wants it finds this class by name, and without Combat enabled it does not
+ * exist. The class name and its public members are a contract: they never change.
+ *
+ * <p>Kept for mods compiled against it (the HUD up to 0.1.6). The current way is the Loader's:
+ * {@code api.Relations} and {@code api.Players}, which Combat feeds.
  */
 public final class CombatApi {
 
-    /** Sem o Combat iniciado, ou o proprio jogador. */
+    /** Combat not started, or the player themselves. */
     public static final int NONE = 0;
-    /** Na lista de aliados ou num cla aliado, mas nao no meu cla. */
+
+    /** On the allies list or in an allied clan, but not in my clan. */
     public static final int ALLY = 1;
-    /** Do meu cla. */
+
+    /** In my clan. */
     public static final int CLAN = 2;
-    /** De outro cla, que nao e aliado. */
+
+    /** In another clan that is not allied. */
     public static final int ENEMY = 3;
-    /** Sem cla e sem alianca: nem inimigo nem aliado. Desde a 0.1.1. */
+
+    /** No clan and no alliance: neither enemy nor ally. Since 0.1.1. */
     public static final int NEUTRAL = 4;
 
-    /** Cor de cada codigo de formatacao do jogo (0-9, a-f). */
+    /** The running Combat, or null before it starts. */
     static volatile SteinCombat mod;
 
-    private CombatApi() {
-    }
+    private CombatApi() {}
 
     /**
-     * Relacao do jogador de nick com o jogador local: {@link #NONE}, {@link #CLAN}, {@link #ALLY}, {@link #ENEMY} ou
-     * {@link #NEUTRAL}.
+     * The relation of the player with that nick to the local player: {@link #NONE}, {@link #CLAN},
+     * {@link #ALLY}, {@link #ENEMY} or {@link #NEUTRAL}.
      *
-     * <p><b>Inimigo so com prova.</b> Vermelho na tela e um aviso, e aviso errado e pior do que aviso nenhum: quem
-     * joga confia nele para decidir em quem bater. Entao so e inimigo quem esta marcado a mao pelo jogador, ou quem
-     * o <b>plugin de clas</b> poe num cla diferente do meu — e, mesmo assim, so se eu tiver cla, porque a briga e
-     * entre clas e quem nao tem nenhum nao esta em briga nenhuma.
+     * <p><b>Enemy only with proof.</b> Red on screen is a warning, and a wrong warning is worse
+     * than none: players trust it to decide whom to hit. So only those marked by hand by the player
+     * are enemies, or those the <b>clan plugin</b> puts in a clan other than mine — and even then
+     * only if I have a clan, because the fight is between clans and whoever has none is in no
+     * fight.
      *
-     * <p>O colchete no nome ({@code "[ABC] Nick"}) continua servindo para <b>reconhecer os meus</b>, e nunca para
-     * pintar alguem de inimigo: num servidor comum {@code [VIP]}, {@code [ADM]} e {@code [PRO]} tem as mesmas tres
-     * letras de uma tag de cla, e era assim que meia lista virava inimiga sem ser.
+     * <p>Brackets in the name ({@code "[ABC] Nick"}) still serve to <b>recognize my own</b>, and
+     * never to paint someone as an enemy: on an ordinary server {@code [VIP]}, {@code [ADM]} and
+     * {@code [PRO]} have the same three letters as a clan tag, and that is how half the list became
+     * an enemy without being one.
      */
     public static int relation(String nick) {
         SteinCombat m = mod;
         if (m == null || nick == null) {
             return NONE;
         }
-        // Guardada no Combat enquanto listas, opcoes, meu nick e clas nao mudam (a nametag pergunta a cada quadro).
-        return m.relation(nick);
+        // Cached in Combat while lists, options, my nick and clans do not change (the nametag asks
+        // every frame).
+        return m.teams.relation(nick);
     }
 
-
     /**
-     * Tag do cla do jogador de nick ("ABC"), ou null sem cla. Vem do time "sc_TAG" do plugin e, com a opcao ligada,
-     * do prefixo entre colchetes. E o que permite a outro mod agrupar por cla (a lista do Tab do HUD).
+     * The clan tag of the player with that nick ("ABC"), or null with no clan. It comes from the
+     * plugin's "sc_TAG" team and, with the option on, from the bracketed prefix. It is what lets
+     * another mod group by clan (the HUD's Tab list).
      */
     public static String clan(String nick) {
-        return mod == null ? null : SteinCombat.clanOf(nick);
+        return mod == null ? null : Clans.of(nick);
     }
 
-    /** Cor dos aliados escolhida no Combat (RGB). */
+    /** The allies' color chosen in Combat (RGB). */
     public static int allyColor() {
         SteinCombat m = mod;
-        return m == null ? dev.xavier.stein.loader.api.Option.RGB[10] : rgb(m.config.allyColor);
+        return m == null ? Option.RGB[10] : rgb(m.config.allyColor);
     }
 
     /**
-     * A cor do nick deste jogador (RGB), pela relacao e pelas quatro cores do Combat: meu cla, aliado, neutro e
-     * inimigo. E o mesmo numero que o Tab, a cabeca e o minimapa usam, para os tres concordarem. Com as cores
-     * desligadas, ou sem o Combat, devolve branco. Desde a 0.1.1.
+     * The color of this player's nick (RGB), by the relation and Combat's four colors: my clan,
+     * ally, neutral and enemy. It is the same number the Tab list, the head and the minimap use, so
+     * the three agree. With colors off, or without Combat, white. Since 0.1.1.
      */
     public static int colorOf(String nick) {
         SteinCombat m = mod;
         if (m == null || !m.config.colorNames) {
             return 0xFFFFFF;
         }
-        return rgb(switch (relation(nick)) {
-            case CLAN -> m.config.clanColor;
-            case ALLY -> m.config.allyColor;
-            case ENEMY -> m.config.enemyColor;
-            default -> m.config.neutralColor;
-        });
+        return rgb(colorCode(m.config, relation(nick)));
     }
 
-    /** O codigo de formatacao do jogo ('a', '9'...) como RGB. */
+    /** The game's formatting code ('a', '9'...) as RGB. */
     static int rgb(char code) {
-        return dev.xavier.stein.loader.api.Option.rgb(String.valueOf(code));
+        return Option.rgb(String.valueOf(code));
     }
 
-    /** O codigo de formatacao do nick deste jogador, para quem escreve texto do jogo (o Tab e a cabeca). */
+    /**
+     * The formatting code of this player's nick, for whoever writes game text (the Tab list and the
+     * head).
+     */
     static char code(String nick) {
         SteinCombat m = mod;
         if (m == null || !m.config.colorNames) {
             return 'f';
         }
-        return switch (relation(nick)) {
-            case CLAN -> m.config.clanColor;
-            case ALLY -> m.config.allyColor;
-            case ENEMY -> m.config.enemyColor;
-            default -> m.config.neutralColor;
+        return colorCode(m.config, relation(nick));
+    }
+
+    private static char colorCode(CombatConfig c, int relation) {
+        return switch (relation) {
+            case CLAN -> c.clanColor;
+            case ALLY -> c.allyColor;
+            case ENEMY -> c.enemyColor;
+            default -> c.neutralColor;
         };
     }
 }
