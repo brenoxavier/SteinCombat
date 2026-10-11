@@ -57,7 +57,7 @@ jobs:
       INDEX_ID: combat
       INDEX_DESCRIPTION: Aliados e clãs, automações de armadura e efeitos, e movimentação para PvP.
       # A private mod is released in a public repository of its own, set in the RELEASE_REPO variable (owner/repo;
-      # still to be decided for Combat), with the RELEASE_TOKEN secret: without the variable a tag fails here.
+      # x4vieer/stein-combat for now), with the RELEASE_TOKEN secret: without the variable a tag fails here.
       RELEASE_REPO: ${{ vars.RELEASE_REPO }}
       # ---
       DIST_OWNER: ${{ vars.DIST_OWNER || 'Stein-Project' }}
