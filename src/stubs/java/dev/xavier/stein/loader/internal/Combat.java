@@ -1,14 +1,17 @@
 /*
- * Copyright (c) 2026 Breno Xavier. All rights reserved.
- * Proprietary software: see the LICENSE file at the root of this repository.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) 2026 Breno Xavier
  */
 
 package dev.xavier.stein.loader.internal;
 
 /**
  * Compile-time copy of the signatures of the Loader's engine combat switches, which stein-api.jar
- * leaves out (the {@code internal} package is only for the official Stein mods). It is never
- * packed: in the game, the Loader's own class answers. Keep in step with the Loader's {@code
+ * leaves out (the {@code internal} package is outside the public API). It is never packed: in the
+ * game, the Loader's own class answers. Keep in step with the Loader's {@code
  * dev.xavier.stein.loader.internal.Combat}.
  */
 public final class Combat {

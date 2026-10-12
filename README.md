@@ -1,7 +1,8 @@
 # Combat
 
-A Stein Loader mod for Minecraft 1.8.9, for PvP: allies and clans, the nearest enemy and ally on the HUD, and
-fight automations. Everything is set up on its page in the Panel (Insert), where each feature has its own key.
+A [Stein Loader](https://github.com/Stein-Project) mod for Minecraft 1.8.9, for PvP: allies and clans, the nearest
+enemy and ally on the HUD, and fight automations. Everything is set up on its page in the Panel (Insert), where each
+feature has its own key.
 
 - **Team**: allies and enemies by nick or clan tag (the Panel, or a key aimed at a player), the members of your
   clan as allies, name colors by relation in the Tab list and above heads, and the lists from a JSON file at a URL
@@ -14,10 +15,19 @@ fight automations. Everything is set up on its page in the Panel (Insert), where
 
 Some of these are things servers may detect and punish (the Panel says which); the player decides what to turn on.
 
-This repository is **private** and the mod is proprietary (see [LICENSE](LICENSE)). Players get the `.steinmod`
-from its public release repository (the `RELEASE_REPO` variable of this repository, see below) through the
-[Stein Client](https://github.com/Stein-Project/stein-client/releases/latest) and the mods index of
-[Stein-Project/stein-loader](https://github.com/Stein-Project/stein-loader).
+## Download
+
+Combat is a third-party mod: it is not on the Stein Client's official list. In the
+[Stein Client](https://github.com/Stein-Project/stein-client/releases/latest), add its index under third-party mods
+and the client installs and updates it for you:
+
+```
+https://github.com/brenoxavier/SteinCombat/releases/latest/download/steinmods.json
+```
+
+By hand: download `Combat.steinmod` from the
+[latest release](https://github.com/brenoxavier/SteinCombat/releases/latest), put it in `.minecraft/mods` and play
+with the **Stein Loader** profile.
 
 ## Building
 
@@ -31,14 +41,13 @@ first time, from your own installation or from Mojang.
 ./gradlew installMod       # build and copy into .minecraft/mods
 ```
 
-Before a Stein SDK release, build against the local SDK (`../stein-project/sdk`, built there with
-`./gradlew build publishPlugin`): `./gradlew build -Pstein.sdkDir=../stein-project/sdk`.
+Before a Stein SDK release (developing the SDK and the mod together), build against a local SDK: in a clone of
+[sdk](https://github.com/Stein-Project/sdk) run `./gradlew build publishPlugin`, then here
+`./gradlew build -Pstein.sdkDir=<path to that clone>` (the plugin comes from its `build/maven-repo`, the SDK from
+its `build/sdk/stein-sdk.jar`).
 
-Combat calls the Loader's engine switches in `dev.xavier.stein.loader.internal.Combat`, which only the official mods
-use and which the SDK's API jar leaves out: the mod compiles against the signatures in `src/stubs` (never packed).
-
-Before a release, check in the game, on a server with clans: the colors in the Tab list and above heads, marking an
-ally and an enemy with the keys, the hit on a clanmate cancelled, the hide key, and the HUD elements.
+Combat calls the Loader's engine switches in `dev.xavier.stein.loader.internal.Combat`, which are outside the public
+API and which the SDK's API jar leaves out: the mod compiles against the signatures in `src/stubs` (never packed).
 
 ## Server plugin
 
@@ -52,17 +61,23 @@ proof of a clan. It is a build of its own and is not released with the mod:
 
 The Spigot API comes from Spigot's Maven repository; offline, pass a local jar with `-Pspigot.jar=<spigot-1.8.8.jar>`.
 
-## Release
+## Contributing
 
-A `v<version>` tag (equal to `"version"` in `src/main/resources/steinmod.json`), with
-`changelog/<version>.en_US.md` (and optionally `.pt_BR.md`) written first. Running the workflow by hand is a dry run. See
-`.github/workflows/release.yml` for the settings it needs: the `RELEASE_REPO` variable (the **public** repository
-that hosts the downloads: x4vieer/stein-combat for now) and the `RELEASE_TOKEN` and `DIST_TOKEN` secrets.
+Bug reports, ideas and pull requests are welcome. Read the
+[contributing guide](https://github.com/Stein-Project/.github/blob/main/CONTRIBUTING.md) first; your first pull
+request asks you to sign the [CLA](https://github.com/Stein-Project/.github/blob/main/CLA.md). For a change to this
+mod, also check in the game, on a server with clans: the colors in the Tab list and above heads, marking an
+ally and an enemy with the keys, the hit on a clanmate cancelled, the hide key, and the HUD elements.
+
+Releases are made by the maintainer: a `v<version>` tag, with `changelog/<version>.en_US.md` (and optionally
+`.pt_BR.md`) written first. Each stable release carries the mod's index, `steinmods.json` (see
+`.github/workflows/release.yml`).
 
 ## Licence
 
-Proprietary, all rights reserved: see [LICENSE](LICENSE) and [NOTICE](NOTICE). The Stein name and logo are covered by
-the [trademark policy](https://github.com/Stein-Project/.github/blob/main/TRADEMARK.md).
+Combat and its server plugin are licensed under the [Mozilla Public License 2.0](LICENSE). Third-party notices are
+in [NOTICE](NOTICE). The Stein name and logo are not covered by the licence: see the
+[trademark policy](https://github.com/Stein-Project/.github/blob/main/TRADEMARK.md).
 
 Stein is not an official Minecraft product. It is not approved by or associated with Mojang or Microsoft.
 
