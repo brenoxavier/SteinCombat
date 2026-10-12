@@ -10,7 +10,7 @@
 //
 // The server plugin in plugin/ is a build of its own: ./gradlew -p plugin build (see plugin/build.gradle).
 plugins {
-    id 'dev.xavier.stein.mod' version '0.2.3'
+    id 'dev.xavier.stein.mod' version '0.2.4'
     id 'com.diffplug.spotless' version '8.10.4'
 }
 
@@ -26,17 +26,6 @@ if (localSdk.present) {
         throw new GradleException("no $jar: run \"./gradlew build publishPlugin\" in ${localSdk.get()} first")
     }
     stein { sdkJar = jar }
-}
-
-// Combat calls the Loader's engine switches in dev.xavier.stein.loader.internal.Combat (sprint in all directions,
-// no hit delay, keep sprint), which are outside the public API and which stein-api.jar leaves out. The mod compiles
-// against the signatures in src/stubs; the real class is the Loader's, in the game. Nothing of src/stubs goes into
-// the .steinmod (the steinmod task packs only the classes of the main source set).
-sourceSets {
-    stubs
-}
-dependencies {
-    compileOnly sourceSets.stubs.output
 }
 
 spotless {

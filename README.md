@@ -46,9 +46,6 @@ Before a Stein SDK release (developing the SDK and the mod together), build agai
 `./gradlew build -Pstein.sdkDir=<path to that clone>` (the plugin comes from its `build/maven-repo`, the SDK from
 its `build/sdk/stein-sdk.jar`).
 
-Combat calls the Loader's engine switches in `dev.xavier.stein.loader.internal.Combat`, which are outside the public
-API and which the SDK's API jar leaves out: the mod compiles against the signatures in `src/stubs` (never packed).
-
 ## Server plugin
 
 `plugin/` is the clan plugin for server owners (Spigot 1.8.8, Java 8): `/clan` creates clans whose `[ABC]` tag shows

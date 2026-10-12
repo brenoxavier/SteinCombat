@@ -10,6 +10,7 @@ package dev.xavier.stein.combat;
 
 import dev.xavier.stein.loader.api.Chat;
 import dev.xavier.stein.loader.api.Entities;
+import dev.xavier.stein.loader.api.Gameplay;
 import dev.xavier.stein.loader.api.Hud;
 import dev.xavier.stein.loader.api.Log;
 import dev.xavier.stein.loader.api.ModContext;
@@ -19,7 +20,6 @@ import dev.xavier.stein.loader.api.Players;
 import dev.xavier.stein.loader.api.Relation;
 import dev.xavier.stein.loader.api.Relations;
 import dev.xavier.stein.loader.api.SteinMod;
-import dev.xavier.stein.loader.internal.Combat;
 
 import java.io.File;
 
@@ -29,7 +29,7 @@ import java.io.File;
  * <ul>
  *   <li>Toggle sprint key (G): sprinting without holding the game's sprint key ({@link
  *       ToggleSprint}). With "Sprint in all directions" (an option), also backwards and sideways,
- *       through the Loader ({@code Combat.setSprintAllDirections}).
+ *       through the Loader ({@code Gameplay.setSprintAllDirections}).
  *   <li>Allies: nicks and clans on a list (the Panel, or the Y key aimed at a player; with Shift,
  *       their clan), and the members of my clan (an option, on). What being an ally gives is <b>the
  *       name's color</b>, in the Tab list ({@code onPlayerListName}) and above the head ({@code
@@ -179,12 +179,12 @@ public final class SteinCombat implements SteinMod {
      */
     void apply() {
         teams.apply(config, config.remote ? remote.feed() : null);
-        Combat.setNoHitDelay(config.noHitDelay);
-        Combat.setSprintOnHit(config.sprintOnHit);
+        Gameplay.setNoHitDelay(config.noHitDelay);
+        Gameplay.setSprintOnHit(config.sprintOnHit);
         // No Slowdown: disabled (hidden from the Panel, always off). The code stays to bring it
         // back.
-        Combat.setNoHitSlowdown(NO_SLOWDOWN_ENABLED && config.noHitSlowdown);
-        Combat.setSprintAllDirections(config.allDirections);
+        Gameplay.setNoHitSlowdown(NO_SLOWDOWN_ENABLED && config.noHitSlowdown);
+        Gameplay.setSprintAllDirections(config.allDirections);
         publishColors();
     }
 
