@@ -36,15 +36,3 @@ jobs:
           name: steinmod
           path: build/libs/*.steinmod
           retention-days: 14
-      # The clan plugin for servers (plugin/, a build of its own against the Spigot API from Spigot's repository).
-      # It does not depend on the SDK, so it runs even when the mod's build fails.
-      - name: Server plugin
-        if: success() || failure()
-        run: ./gradlew -p plugin build
-      - uses: actions/upload-artifact@v4
-        if: success() || failure()
-        with:
-          name: server-plugin
-          path: plugin/build/libs/SteinCombat.jar
-          if-no-files-found: ignore
-          retention-days: 14

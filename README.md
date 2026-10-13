@@ -46,18 +46,6 @@ Before a Stein SDK release (developing the SDK and the mod together), build agai
 `./gradlew build -Pstein.sdkDir=<path to that clone>` (the plugin comes from its `build/maven-repo`, the SDK from
 its `build/sdk/stein-sdk.jar`).
 
-## Server plugin
-
-`plugin/` is the clan plugin for server owners (Spigot 1.8.8, Java 8): `/clan` creates clans whose `[ABC]` tag shows
-in everyone's Tab list and above heads, with no friendly fire, and whose `sc_ABC` scoreboard team the mod reads as
-proof of a clan. It is a build of its own and is not released with the mod:
-
-```sh
-./gradlew -p plugin build  # plugin/build/libs/SteinCombat.jar
-```
-
-The Spigot API comes from Spigot's Maven repository; offline, pass a local jar with `-Pspigot.jar=<spigot-1.8.8.jar>`.
-
 ## Contributing
 
 Bug reports, ideas and pull requests are welcome. Read the
@@ -72,7 +60,7 @@ Releases are made by the maintainer: a `v<version>` tag, with `changelog/<versio
 
 ## Licence
 
-Combat and its server plugin are licensed under the [Mozilla Public License 2.0](LICENSE). Third-party notices are
+Combat is licensed under the [Mozilla Public License 2.0](LICENSE). Third-party notices are
 in [NOTICE](NOTICE). The Stein name and logo are not covered by the licence: see the
 [trademark policy](https://github.com/Stein-Project/.github/blob/main/TRADEMARK.md).
 

@@ -7,8 +7,6 @@
 // Before an SDK release, build against a local SDK (the sdk repository, built with "./gradlew build publishPlugin"):
 //
 //   ./gradlew build -Pstein.sdkDir=../stein-project/sdk
-//
-// The server plugin in plugin/ is a build of its own: ./gradlew -p plugin build (see plugin/build.gradle).
 plugins {
     id 'dev.xavier.stein.mod' version '0.2.4'
     id 'com.diffplug.spotless' version '8.10.4'
