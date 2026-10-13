@@ -147,6 +147,14 @@ public final class SteinCombat implements SteinMod {
         autoRefill.windowItems(windowId);
     }
 
+    /**
+     * Auto Armor swapped in the last ticks or is waiting for the server to check a swap: no chest
+     * opens now (Auto Refill).
+     */
+    boolean armorSettling() {
+        return armorQuiet < 2 || autoArmor.checking();
+    }
+
     /** Auto Refill has the chest open (or is waiting for it): the bag is its. */
     boolean refillBusy() {
         return autoRefill.busy();

@@ -205,8 +205,23 @@ final class AutoRefill {
             done(c);
             return;
         }
-        // Never over one of the player's inventory screens: the chest would take its place.
-        if (!Inventory.isContainerOpen() && !Inventory.isScreenOpen() && needs(c)) {
+        if (onKey && !roomToBring(c)) {
+            notice(Lang.tr("steincombat.refill.bagFull"));
+            done(c);
+            return;
+        }
+        // Never over one of the player's inventory screens: the chest would take its place. With
+        // no room to bring anything (bag full and no worn piece to swap), it does not even open:
+        // it waits for a free space or a worn piece, and goes in that tick — without the long wait
+        // of a wasted trip. Nor with Auto Armor swapping or waiting for its check: the server runs
+        // commands in a queue of their own, so the chest could open before the armor clicks and
+        // the check sent earlier — and the server drops clicks for a window that is not the open
+        // one, without a word.
+        if (!Inventory.isContainerOpen()
+                && !Inventory.isScreenOpen()
+                && !mod.armorSettling()
+                && needs(c)
+                && roomToBring(c)) {
             if (!c.refillShowWindow) {
                 // The chest comes virtual: open on the server, with no screen on the client — not
                 // even a flicker.
@@ -471,11 +486,12 @@ final class AutoRefill {
             failStreak = 0;
             cooldown = 40;
         } else if (done) {
-            // Nothing to bring (the chest without fitting armor, or the bag full): wait longer
-            // before trying again.
+            // Nothing to bring. Bag full: the next trip only goes with room (roomToBring), so the
+            // wait is short. The chest without fitting armor: 10 s, so as not to send the command
+            // over and over.
             notice(Lang.tr(bagFull ? "steincombat.refill.bagFull" : "steincombat.refill.empty"));
             failStreak = 0;
-            cooldown = 1200;
+            cooldown = bagFull ? 40 : 200;
         } else {
             // Timed out or the server refusing: the wait doubles with each such trip, from 10 s to
             // 80 s, without stopping.
@@ -513,6 +529,11 @@ final class AutoRefill {
             }
         }
         return false;
+    }
+
+    /** There is a way to bring something: a free space, or a worn piece to swap for the chest's. */
+    private static boolean roomToBring(CombatConfig c) {
+        return ArmorSlots.freeSlot() >= 0 || ArmorSlots.worn(c, -1) >= 0;
     }
 
     /**

@@ -13,6 +13,8 @@ import dev.xavier.stein.loader.api.Inventory;
 import dev.xavier.stein.loader.api.Lang;
 import dev.xavier.stein.loader.api.Stacks;
 
+import java.util.Arrays;
+
 /**
  * Auto Armor: replaces and swaps armor by itself, every tick, with the same clicks a player makes —
  * without opening the inventory, without pausing, without holding the player. It works with the
@@ -37,18 +39,26 @@ import dev.xavier.stein.loader.api.Stacks;
  * rule asks ({@link Rule#durability}), and only as a tie-breaker between pieces that protect the
  * same; after it, the bag comes before the hotbar.
  *
- * <p>The clicks are shift-clicks: take the old one off and put the new one on, without going
- * through the cursor (the player may be holding an item in the inventory). With no free space, the
- * three clicks of a swap, only with the cursor empty.
+ * <p>The shift-click is only for an empty slot (the piece broke). With the piece still on, a swap
+ * that never leaves the body without it: a spare on the hotbar goes on with the number key over the
+ * armor slot (one packet); one in the bag, with the three clicks of a swap (the new one takes the
+ * old one's place and the old one goes where the new one was). Whatever goes through the cursor
+ * waits for it to be empty (the player may be holding an item in the inventory).
  *
  * <p><b>Checked with the server.</b> The client applies the click at once; if the server refuses it
  * without sending the slot back (a plugin that cancels the click, an anticheat, lag), the client
  * keeps showing armor the server does not have — and Auto Armor, which only sees the client, thinks
- * all is well. So after acting, the real inventory is asked from the server ({@link
- * Inventory#resync}); if the swap did not take, the slot comes back empty and the piece is swapped
- * again. A piece that fails several times in a row waits longer and longer between attempts,
- * without ever stopping for good. Taking hits while the worn armor's durability does not move is a
- * sign of a client out of step with the server too.
+ * all is well. With many hits landing, the durability the server sends for the old piece can also
+ * arrive after the click and put it back in the slot, on the client. So in the same tick as the
+ * swap, right after its clicks, the real inventory is asked from the server ({@link
+ * Inventory#resync}): the server answers after applying the swap, with the right state. Until the
+ * answer, the swapped piece is not swapped again (an empty slot is still filled, and the other
+ * pieces go on); with it, the swap counts as done or refused. Swapping the same piece again soon
+ * after (armor running out fast in a fight) is not a refusal: only the server's answer decides. A
+ * piece refused several times in a row waits longer and longer between attempts, without ever
+ * stopping for good, and each attempt changes the way of swapping (the fallback, see {@link
+ * #swap}). Taking hits while the worn armor's durability does not move is a sign of a client out of
+ * step with the server too.
  */
 final class AutoArmor {
 
@@ -81,31 +91,22 @@ final class AutoArmor {
     private static final int PROJECTILE_PROTECTION = 4;
     private static final int UNBREAKING = 34;
 
-    /** Ticks a piece waits after acting (for the server to confirm). */
+    /** Ticks a piece waits after a swap the server refused; doubles with each refusal in a row. */
     private static final int COOLDOWN = 4;
-
-    /**
-     * Half a second after acting, the real inventory is asked from the server (Inventory.resync).
-     */
-    private static final int VERIFY_TICKS = 10;
 
     /**
      * How long to wait for the inventory after asking; with no answer, it goes on with what it has.
      */
-    private static final int RESYNC_TIMEOUT = 40;
+    private static final int RESYNC_TIMEOUT = 20;
+
+    /** How many times the check is asked again when its answer does not arrive. */
+    private static final int MAX_ASK_AGAIN = 2;
 
     /**
-     * Acting on the same piece again before this (10 s) counts as the swap not having taken. Longer
-     * than the longest wait with the check: otherwise, after the longest wait, the count would
-     * reset and the attempts would become fast again.
+     * The wait doubles with each refusal in a row, up to 4 << 3 = 32 ticks (1.6 s): in a fight, try
+     * again soon.
      */
-    private static final int RETRY_WINDOW = 200;
-
-    /**
-     * The wait after acting doubles with each swap that did not take, up to 4 << 5 = 128 ticks (6.4
-     * s).
-     */
-    private static final int MAX_BACKOFF = 5;
+    private static final int MAX_BACKOFF = 3;
 
     /**
      * Hits in a row without the worn armor's durability going down, before asking for the real
@@ -159,19 +160,29 @@ final class AutoArmor {
 
     private int now;
 
-    /** The tick when the inventory will be asked for (-1 none set). */
-    private int verifyAt = -1;
-
     /**
-     * Waiting for the requested inventory until this tick (-1 not waiting): nothing is decided on
-     * the old state.
+     * Waiting for the requested inventory until this tick (-1 not waiting): only empty slots are
+     * filled meanwhile.
      */
     private int awaitUntil = -1;
 
-    private int lastResync = -STILL_RESYNC_GAP;
-    private final int[] lastAct = {-RETRY_WINDOW, -RETRY_WINDOW, -RETRY_WINDOW, -RETRY_WINDOW};
+    /** Inventory requests not answered yet: the check only counts with the last one's answer. */
+    private int outstanding;
 
-    /** Swaps of the piece in a row that did not take. */
+    /** Times the check was asked again because the answer did not arrive. */
+    private int askAgain;
+
+    private int lastResync = -STILL_RESYNC_GAP;
+
+    /**
+     * The piece was swapped and waits for the check (it is not acted on again until the answer).
+     */
+    private final boolean[] pending = new boolean[4];
+
+    /** The spare put on was above the threshold: at the check, the slot must be like that. */
+    private final boolean[] expectGood = new boolean[4];
+
+    /** Swaps of the piece in a row that the server refused. */
     private final int[] fails = new int[4];
 
     /** Already warned that the server is refusing the piece. */
@@ -195,9 +206,42 @@ final class AutoArmor {
      * request waited for.
      */
     void windowItems(int windowId) {
-        if (windowId == 0 && awaitUntil >= 0) {
+        if (windowId == 0 && awaitUntil >= 0 && --outstanding <= 0) {
             awaitUntil = -1;
+            outstanding = 0;
             log("real inventory arrived");
+            askAgain = 0;
+            verify();
+        }
+    }
+
+    /** The real inventory arrived: each swapped piece counts as done or refused. */
+    private void verify() {
+        CombatConfig c = mod.config;
+        for (int piece = 0; piece < 4; piece++) {
+            if (!pending[piece]) {
+                continue;
+            }
+            pending[piece] = false;
+            Object s = Inventory.armor(piece);
+            boolean ok =
+                    s != null
+                            && (!expectGood[piece]
+                                    || !Stacks.isDamageable(s)
+                                    || Stacks.maxDamage(s) - Stacks.damage(s)
+                                            > c.armorRule(piece).threshold);
+            if (ok) {
+                fails[piece] = 0;
+                warnedRefused[piece] = false;
+                continue;
+            }
+            fails[piece]++;
+            cooldown[piece] = COOLDOWN << Math.min(fails[piece], MAX_BACKOFF);
+            log("piece " + piece + " refused by the server, " + fails[piece] + " in a row");
+            if (fails[piece] >= 3 && !warnedRefused[piece]) {
+                warnedRefused[piece] = true;
+                notice(Lang.tr("steincombat.armor.refused", Lang.tr(PIECE_KEYS[piece])));
+            }
         }
     }
 
@@ -224,13 +268,44 @@ final class AutoArmor {
         return sum;
     }
 
+    /**
+     * Waiting for the server's answer about a swap: Auto Refill opens no chest meanwhile (the
+     * server would drop the answer for a window that is no longer the open one).
+     */
+    boolean checking() {
+        return awaitUntil >= 0;
+    }
+
     /** Asks for the real inventory; until it arrives (or the time runs out), nothing is decided. */
     private void resync(String why) {
         if (Inventory.resync()) {
             lastResync = now;
+            outstanding++;
             awaitUntil = now + RESYNC_TIMEOUT;
             log("inventory asked from the server: " + why);
         }
+    }
+
+    /** The requested inventory did not arrive in time. */
+    private void answerTimedOut() {
+        awaitUntil = -1;
+        outstanding = 0;
+        boolean unchecked = false;
+        for (boolean p : pending) {
+            unchecked |= p;
+        }
+        if (unchecked && askAgain < MAX_ASK_AGAIN) {
+            // A swap with no answer: the client may be showing armor the server does not have,
+            // so it asks again rather than trusting it.
+            askAgain++;
+            resync("the answer did not arrive, asking again");
+            return;
+        }
+        // Still no answer: go on with what the client has, without counting a refusal; the next
+        // swap checks again.
+        askAgain = 0;
+        Arrays.fill(pending, false);
+        log("the requested inventory did not arrive");
     }
 
     /** One tick; returns true if it touched the inventory. */
@@ -239,29 +314,21 @@ final class AutoArmor {
         now++;
         CombatConfig c = mod.config;
         if (!c.autoArmor || Entities.self() == null) {
-            verifyAt = -1;
             awaitUntil = -1;
+            outstanding = 0;
             hitCheckAt = -1;
+            Arrays.fill(pending, false);
             return false;
         }
         if (Inventory.isContainerOpen()) {
-            // The check that was set waits until it closes: the chest window has no armor.
+            // The chest window has no armor: it acts when it closes.
             return false;
         }
-        if (awaitUntil >= 0) {
-            if (now < awaitUntil) {
-                return false;
-            }
-            // No answer: go on with what the client has, and the next swap checks again.
-            awaitUntil = -1;
-            log("the requested inventory did not arrive");
+        if (awaitUntil >= 0 && now >= awaitUntil) {
+            answerTimedOut();
         }
-        if (verifyAt >= 0 && now >= verifyAt) {
-            verifyAt = -1;
-            resync("check the swap");
-            return false;
-        }
-        if (hitCheckAt >= 0 && now >= hitCheckAt) {
+        boolean waiting = awaitUntil >= 0;
+        if (!waiting && hitCheckAt >= 0 && now >= hitCheckAt) {
             hitCheckAt = -1;
             long wear = wornWear();
             stillHits = wear >= 0 && wear == hitWear ? stillHits + 1 : 0;
@@ -273,17 +340,13 @@ final class AutoArmor {
                 return false;
             }
         }
-        if (Inventory.cursor() != null && !Inventory.isScreenOpen()) {
-            // With no screen open nobody holds an item on the cursor: it is left over from a swap
-            // the server undid. Put it in a free space (with the inventory open it may be the
-            // player dragging: then it is left alone).
-            int free = Inventory.firstEmpty();
-            if (free >= 0) {
-                Inventory.pickup(Inventory.slotOf(free));
-            }
+        if (Inventory.cursor() != null && !Inventory.isScreenOpen() && dropCursor()) {
+            resync("item left on the cursor");
             return true;
         }
-        // From the helmet to the boots, as the screen shows them.
+        // From the helmet to the boots, as the screen shows them. Each piece on its own: a piece
+        // waiting for its check does not hold the others back (in a heavy fight the four reach
+        // the threshold together).
         for (int piece = Inventory.HELMET; piece >= Inventory.BOOTS; piece--) {
             if (cooldown[piece] > 0) {
                 cooldown[piece]--;
@@ -295,13 +358,41 @@ final class AutoArmor {
             }
             Object worn = Inventory.armor(piece);
             if (worn == null) {
+                // An empty slot never waits, not even for its own check: without the piece the
+                // player is unprotected, and a shift-click into a slot the server has filled only
+                // moves the spare elsewhere.
                 replaceMissing(piece, r);
-            } else if (Stacks.isDamageable(worn)
+            } else if (!pending[piece]
+                    && Stacks.isDamageable(worn)
                     && Stacks.maxDamage(worn) - Stacks.damage(worn) <= r.threshold) {
                 swapWorn(piece, r, worn);
             }
         }
+        if (acted) {
+            // In the same tick: the server answers with the swap already applied.
+            resync("check the swap");
+        }
         return acted;
+    }
+
+    /**
+     * With no screen open nobody holds an item on the cursor: it is left over from a swap the
+     * server undid (with the inventory open it may be the player dragging: then it is left alone).
+     * An armor piece whose slot is empty goes straight on; anything else, to a free space. With
+     * neither, the item stays there and the rest goes on (the shift-click does not use the cursor):
+     * it must never stop Auto Armor, as it did with a full bag.
+     *
+     * @return whether it clicked
+     */
+    private static boolean dropCursor() {
+        Object held = Inventory.cursor();
+        int piece = Inventory.armorPiece(held);
+        if (piece >= 0 && Inventory.armor(piece) == null) {
+            int to = Inventory.slotOf(Inventory.ARMOR_START + piece);
+            return to >= 0 && Inventory.pickup(to);
+        }
+        int free = Inventory.firstEmpty();
+        return free >= 0 && Inventory.pickup(Inventory.slotOf(free));
     }
 
     /** The slot of the piece is empty: put on the best spare. */
@@ -359,35 +450,23 @@ final class AutoArmor {
             return;
         }
         warned[piece] = false;
-        if (!swap(piece, index)) {
+        Object spare = Inventory.stack(index);
+        boolean good =
+                !Stacks.isDamageable(spare)
+                        || Stacks.maxDamage(spare) - Stacks.damage(spare)
+                                > mod.config.armorRule(piece).threshold;
+        if (!swap(piece, index, fails[piece])) {
             return;
         }
         acted = true;
-        // Acting on the same piece again right after: the previous swap did not take on the server
-        // (the check brought the slot back). The wait doubles each time, and goes back to normal
-        // when a swap stays.
-        fails[piece] = now - lastAct[piece] < RETRY_WINDOW ? fails[piece] + 1 : 0;
-        lastAct[piece] = now;
-        cooldown[piece] = COOLDOWN << Math.min(fails[piece], MAX_BACKOFF);
-        boolean warnNow = false;
-        if (fails[piece] == 0) {
-            warnedRefused[piece] = false;
-        } else if (fails[piece] >= 3 && !warnedRefused[piece]) {
-            warnedRefused[piece] = true;
-            warnNow = true;
-        }
+        pending[piece] = true;
+        expectGood[piece] = good;
         log(
                 "piece "
                         + piece
                         + " swapped"
                         + (fails[piece] > 0 ? ", attempt " + (fails[piece] + 1) : ""));
-        if (verifyAt < 0) {
-            verifyAt = now + VERIFY_TICKS;
-        }
-        notice(
-                Lang.tr(
-                        warnNow ? "steincombat.armor.refused" : doneKey,
-                        Lang.tr(PIECE_KEYS[piece])));
+        notice(Lang.tr(doneKey, Lang.tr(PIECE_KEYS[piece])));
     }
 
     private void log(String text) {
@@ -427,21 +506,32 @@ final class AutoArmor {
     }
 
     /**
-     * Puts on the piece at the index. Empty slot: one shift-click. With the armor still on and a
-     * free space: two shift-clicks (old off, new on), nothing going through the cursor. With no
-     * space: the three clicks of a swap (the old one goes where the new one was), only with the
-     * cursor empty.
+     * Puts on the piece at the index. The shift-click only with the slot empty (the piece broke).
+     * With the armor still on, a swap that never leaves the body without it: a spare on the hotbar,
+     * the number key over the armor slot (one packet); in the bag, the three clicks of a swap (the
+     * new one takes the old one's place, and the old one goes where the new one was).
+     *
+     * <p>Fallback: {@code attempt} is how many times in a row the server refused the piece, and
+     * each refusal switches the way — empty slot, between the shift-click and picking up and
+     * dropping on the armor slot; worn with the spare on the hotbar, between the number key and the
+     * three clicks. Whatever goes through the cursor only with it empty; with an item on it (the
+     * player dragging), it waits.
      */
-    private static boolean swap(int piece, int index) {
+    private static boolean swap(int piece, int index, int attempt) {
         int from = Inventory.slotOf(index);
-        if (from < 0) {
+        int to = Inventory.slotOf(Inventory.ARMOR_START + piece);
+        if (from < 0 || to < 0) {
             return false;
         }
+        boolean alt = attempt % 2 == 1;
         if (Inventory.armor(piece) == null) {
-            return Inventory.quickMove(from);
+            if (!alt) {
+                return Inventory.quickMove(from);
+            }
+            return Inventory.cursor() == null && Inventory.pickup(from) && Inventory.pickup(to);
         }
-        if (Inventory.firstEmpty() >= 0) {
-            return Inventory.unequip(piece) && Inventory.quickMove(from);
+        if (index < Inventory.MAIN_START && !alt) {
+            return Inventory.swapHotbar(to, index);
         }
         return Inventory.cursor() == null && Inventory.equip(index);
     }
