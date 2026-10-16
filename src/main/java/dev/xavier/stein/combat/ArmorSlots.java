@@ -49,8 +49,36 @@ final class ArmorSlots {
     }
 
     /**
+     * Items a player fights with: they go to the chest only when nothing else can make room. The
+     * damageable ones (weapons, bows, rods, tools) count too, by {@link #isCombatItem}.
+     */
+    private static final String[] COMBAT_ITEMS = {
+        "potion",
+        "golden_apple",
+        "mushroom_stew",
+        "ender_pearl",
+        "arrow",
+        "golden_carrot",
+        "cooked_beef",
+        "cooked_porkchop",
+        "cooked_chicken",
+        "cooked_mutton",
+        "cooked_rabbit",
+        "cooked_fish",
+        "bread",
+        "baked_potato",
+        "apple",
+        "snowball",
+        "egg",
+        "water_bucket",
+        "lava_bucket",
+        "web"
+    };
+
+    /**
      * A worn armor piece in the bag or the hotbar (at its rule's threshold): the requested piece
-     * first, then any; -1 with none. {@code piece} -1 accepts any piece.
+     * first, then any; -1 with none. {@code piece} -1 accepts any piece. The hotbar counts: with a
+     * full bag a spare can land there ({@link #freeSlot}), and once worn it must still go back.
      */
     static int worn(CombatConfig c, int piece) {
         int any = -1;
@@ -70,6 +98,87 @@ final class ArmorSlots {
             }
         }
         return any;
+    }
+
+    /**
+     * A bag slot whose item can go to the chest to make room for a spare of {@code piece}, when the
+     * bag is full and has no worn piece to swap: without it the piece would stay off until a space
+     * opens. Never the hotbar. In order, what costs the player least:
+     *
+     * <ol>
+     *   <li>an ordinary item (blocks, empty bowls, anything not used to fight);
+     *   <li>a spare of another piece that has more than it needs (the worst of them by its rule):
+     *       full of chestplates and needing a helmet, a chestplate goes;
+     *   <li>an item to fight with ({@link #isCombatItem}).
+     * </ol>
+     *
+     * The item is not lost: it takes the spare's place in the chest. -1 with nothing to move.
+     */
+    static int makeRoom(CombatConfig c, int piece) {
+        int combat = -1;
+        for (int i = Inventory.MAIN_START; i < Inventory.ARMOR_START; i++) {
+            Object s = Inventory.stack(i);
+            if (s == null || Inventory.armorPiece(s) >= 0) {
+                continue;
+            }
+            if (!isCombatItem(s)) {
+                return i;
+            }
+            if (combat < 0) {
+                combat = i;
+            }
+        }
+        int surplus = surplusSpare(c, piece);
+        return surplus >= 0 ? surplus : combat;
+    }
+
+    /**
+     * The worst bag spare of the piece (other than {@code piece}) with the most spares above what
+     * Auto Refill keeps, so that giving it up never makes that piece need a trip of its own; -1
+     * with none.
+     */
+    private static int surplusSpare(CombatConfig c, int piece) {
+        int keep = Math.max(1, c.refillTarget);
+        int bestPiece = -1;
+        int most = keep;
+        for (int q = 0; q < 4; q++) {
+            int n = AutoArmor.spares(q, c.armorRule(q));
+            if (q != piece && n > most) {
+                most = n;
+                bestPiece = q;
+            }
+        }
+        if (bestPiece < 0) {
+            return -1;
+        }
+        AutoArmor.Rule r = c.armorRule(bestPiece);
+        int worst = -1;
+        long worstScore = 0;
+        for (int i = Inventory.MAIN_START; i < Inventory.ARMOR_START; i++) {
+            Object s = Inventory.stack(i);
+            if (!AutoArmor.usable(s, bestPiece, r)) {
+                continue;
+            }
+            long score = AutoArmor.score(s);
+            if (worst < 0 || (r.highest ? score < worstScore : score > worstScore)) {
+                worst = i;
+                worstScore = score;
+            }
+        }
+        return worst;
+    }
+
+    /** Is it something a player fights with (a weapon, a tool, a potion, food, a pearl...)? */
+    static boolean isCombatItem(Object s) {
+        if (Stacks.isDamageable(s)) {
+            return true;
+        }
+        for (String id : COMBAT_ITEMS) {
+            if (Stacks.is(s, id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The chest slot with the piece's armor that the rule picks (highest or lowest protection). */
