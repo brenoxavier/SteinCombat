@@ -23,8 +23,11 @@ import dev.xavier.stein.loader.api.Lang;
  * inventory in between). Bringing is: with a free space in the bag, pick from the chest and drop
  * there; with a worn piece in the bag (and "return worn pieces" on, or the bag full), <b>swap</b> —
  * the chest's piece goes where the worn one was and the worn one goes to its place in the chest,
- * three clicks. Swapping is what works with a full chest and a full bag. With nothing to bring, the
- * leftover worn pieces go to the chest, if they fit.
+ * three clicks. Swapping is what works with a full chest and a full bag. With a full bag, no worn
+ * piece and a piece with no spare at all, another bag item is swapped instead (never one from the
+ * hotbar; ordinary items first, then a surplus spare of another piece, then items to fight with:
+ * {@link ArmorSlots#makeRoom}), so the player is never left without a piece. With nothing to bring,
+ * the leftover worn pieces go to the chest, if they fit.
  *
  * <p>The rules are Auto Armor's for each piece ({@link ArmorSlots}): only the pieces turned on, the
  * enchantment filter, and the protection priority (highest or lowest first); worn is at the rule's
@@ -391,12 +394,18 @@ final class AutoRefill {
             // chest's place. Only with "return worn pieces" on or no space in the bag — otherwise
             // the worn piece belongs to the player and stays.
             int give = c.refillDeposit || free < 0 ? ArmorSlots.worn(c, piece) : -1;
+            if (give < 0 && free < 0 && AutoArmor.spares(piece, r) == 0) {
+                // Full bag, no worn piece and no spare at all: another bag item goes to the
+                // chest in its place, rather than leaving the player without the piece. Only
+                // for a piece with none, so a second spare never costs the player an item.
+                give = ArmorSlots.makeRoom(c, piece);
+            }
             lastFrom = from;
             if (give >= 0) {
                 return swapIn(piece, r, from, give);
             }
             if (free < 0) {
-                bagFull = true; // full bag and no worn piece to swap: this piece goes without
+                bagFull = true; // full bag and nothing to swap: this piece goes without
                 continue;
             }
             return pullIn(piece, from, free);
@@ -531,9 +540,23 @@ final class AutoRefill {
         return false;
     }
 
-    /** There is a way to bring something: a free space, or a worn piece to swap for the chest's. */
+    /**
+     * There is a way to bring something: a free space, a worn piece to swap for the chest's, or,
+     * for a piece with no spare at all, a bag item to make room ({@link ArmorSlots#makeRoom}).
+     */
     private static boolean roomToBring(CombatConfig c) {
-        return ArmorSlots.freeSlot() >= 0 || ArmorSlots.worn(c, -1) >= 0;
+        if (ArmorSlots.freeSlot() >= 0 || ArmorSlots.worn(c, -1) >= 0) {
+            return true;
+        }
+        for (int piece = 0; piece < 4; piece++) {
+            AutoArmor.Rule r = c.armorRule(piece);
+            if (r.mode != AutoArmor.OFF
+                    && AutoArmor.spares(piece, r) == 0
+                    && ArmorSlots.makeRoom(c, piece) >= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
