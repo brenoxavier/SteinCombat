@@ -89,6 +89,7 @@ final class ConfigFile {
      * ({@link #DEFAULTS}). What is missing in the JSON stays as it is.
      */
     private static void read(CombatConfig c, JsonObject o) {
+        c.toggleSprint = bool(o, "toggleSprint", c.toggleSprint);
         c.allDirections = bool(o, "allDirections", c.allDirections);
         c.protectAllies = bool(o, "protectAllies", c.protectAllies);
         c.ghostAllies = bool(o, "ghostAllies", c.ghostAllies);
@@ -208,6 +209,7 @@ final class ConfigFile {
 
     static void save(CombatConfig c, File file) {
         JsonObject o = new JsonObject();
+        o.addProperty("toggleSprint", c.toggleSprint);
         o.addProperty("allDirections", c.allDirections);
         o.addProperty("protectAllies", c.protectAllies);
         o.addProperty("ghostAllies", c.ghostAllies);

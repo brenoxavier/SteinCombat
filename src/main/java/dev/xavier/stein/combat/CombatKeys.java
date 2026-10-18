@@ -60,9 +60,10 @@ final class CombatKeys {
     void handle() {
         CombatConfig c = mod.config;
         while (toggleSprint.consumeClick()) {
-            mod.sprint.toggled = !mod.sprint.toggled;
+            c.toggleSprint = !c.toggleSprint;
+            mod.save();
             Say.actionBar(
-                    Lang.tr(mod.sprint.toggled ? "steincombat.sprintOn" : "steincombat.sprintOff"));
+                    Lang.tr(c.toggleSprint ? "steincombat.sprintOn" : "steincombat.sprintOff"));
         }
         while (ally.consumeClick()) {
             mod.marks.allyAtCrosshair();

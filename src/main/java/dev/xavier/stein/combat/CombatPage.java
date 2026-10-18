@@ -144,12 +144,14 @@ final class CombatPage {
     private void movement(Page page) {
         page.section(tr("steincombat.section.movement"));
         // Toggle sprint: the key (G) turns it on and off, and so does the row.
-        ToggleSprint sprint = mod.sprint;
         page.option(
                 feature(
                         "steincombat.toggleSprintName",
-                        () -> sprint.toggled,
-                        v -> sprint.toggled = v,
+                        () -> c.toggleSprint,
+                        v -> {
+                            c.toggleSprint = v;
+                            mod.save();
+                        },
                         keys.toggleSprint,
                         "toggleSprint"));
         page.option(
@@ -187,6 +189,7 @@ final class CombatPage {
         page.restore(
                 () -> {
                     CombatConfig d = new CombatConfig();
+                    c.toggleSprint = d.toggleSprint;
                     c.sprintOnHit = d.sprintOnHit;
                     c.noHitSlowdown = d.noHitSlowdown;
                     c.allDirections = d.allDirections;

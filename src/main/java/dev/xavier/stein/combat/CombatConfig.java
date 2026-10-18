@@ -40,6 +40,9 @@ final class CombatConfig {
     /** Another clan that is not allied: red. */
     char enemyColor = 'c';
 
+    /** Toggle sprint: the mod keeps sprinting without the game's sprint key (the G key). */
+    boolean toggleSprint = true;
+
     /**
      * Sprinting backwards and sideways too. <b>On a server, anticheats usually punish it</b>, like
      * No Hit Delay and sprinting through the hit. On by default: the default chosen for Stein.
