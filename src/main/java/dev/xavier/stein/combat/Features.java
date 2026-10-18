@@ -58,7 +58,7 @@ final class Features {
                             "toggleSprint",
                             "steincombat.toggleSprintName",
                             MOVEMENT,
-                            m -> m.sprint.toggled),
+                            m -> m.config.toggleSprint),
                     new Feature(
                             "keepSprint",
                             "steincombat.sprintOnHit",

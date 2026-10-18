@@ -15,22 +15,19 @@ import dev.xavier.stein.loader.api.Screens;
 /**
  * Toggle sprint: sprinting without holding the game's sprint key — the mod keeps it pressed. With
  * "Sprint in all directions" (an option), also backwards and sideways, through the Loader. No
- * automatic jump and no faster flight.
+ * automatic jump; flying sprints as with the key held (vanilla).
  */
 final class ToggleSprint {
-
-    /** Toggle sprint on (the key, or the Panel row). Not saved: it starts off every session. */
-    boolean toggled;
 
     /** The mod is holding the game's sprint key. */
     private boolean holding;
 
     /**
-     * Every tick: the game's sprint key stays pressed; when turned off, it goes back to the
-     * keyboard's state.
+     * Every tick: with toggle sprint on ({@link CombatConfig#toggleSprint}), the game's sprint key
+     * stays pressed; when turned off, it goes back to the keyboard's state.
      */
-    void tick() {
-        boolean want = toggled && Players.self() != null && !Screens.isOpen();
+    void tick(boolean on) {
+        boolean want = on && Players.self() != null && !Screens.isOpen();
         if (want) {
             Keys.game(Keys.GameKey.SPRINT).hold(true);
             holding = true;

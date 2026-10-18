@@ -244,7 +244,7 @@ public final class SteinCombat implements SteinMod {
         armorQuiet = armorActed ? 0 : Math.min(100, armorQuiet + 1);
         autoRefill.tick();
         smartEffect.tick(armorActed);
-        sprint.tick();
+        sprint.tick(config.toggleSprint);
         diagnostics.afterTick();
     }
 
