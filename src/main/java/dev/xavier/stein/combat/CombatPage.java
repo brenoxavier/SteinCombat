@@ -113,7 +113,8 @@ final class CombatPage {
                                     mod.save();
                                 })
                         .visibleWhen(() -> c.autoclick));
-        Option cps =
+        // Always shown: the rate can be set before the autoclick is turned on by its key.
+        page.option(
                 Option.slider(
                         INDENT + tr("steincombat.autoclick.cps"),
                         CombatConfig.AUTOCLICK_MIN,
@@ -124,8 +125,7 @@ final class CombatPage {
                             c.autoclickCps = (int) Math.round(v);
                             mod.save();
                         },
-                        v -> (int) Math.round(v) + " CPS");
-        page.option(cps.visibleWhen(() -> c.autoclick));
+                        v -> (int) Math.round(v) + " CPS"));
         page.restore(
                 () -> {
                     CombatConfig d = new CombatConfig();
