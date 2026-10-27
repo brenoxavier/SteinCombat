@@ -294,11 +294,14 @@ final class SmartEffect {
             if (p == me || !Entities.isAlive(p)) {
                 continue;
             }
-            int r = CombatApi.relation(Entities.name(p));
-            if (r == CombatApi.ALLY || r == CombatApi.CLAN) {
+            // the distance first: it runs every tick over every player, and the relation (a name
+            // and a cache lookup) is only needed for the few within reach; both have no side
+            // effect, so the answer is the same
+            if (Entities.distance(me, p) > radius) {
                 continue;
             }
-            if (Entities.distance(me, p) <= radius) {
+            int r = CombatApi.relation(Entities.name(p));
+            if (r != CombatApi.ALLY && r != CombatApi.CLAN) {
                 return true;
             }
         }
