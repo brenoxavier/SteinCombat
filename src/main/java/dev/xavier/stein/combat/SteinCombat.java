@@ -8,7 +8,6 @@
 
 package dev.xavier.stein.combat;
 
-import dev.xavier.stein.loader.api.Chat;
 import dev.xavier.stein.loader.api.Entities;
 import dev.xavier.stein.loader.api.Gameplay;
 import dev.xavier.stein.loader.api.Hud;
@@ -274,10 +273,7 @@ public final class SteinCombat implements SteinMod {
         if (!config.colorNames || !Entities.isPlayer(entity)) {
             return name;
         }
-        String text = Chat.formatted(name); // "" if it is not a game text
-        // A new component every time it changes, as before.
-        String painted = teams.paintNametag(Entities.name(entity), text);
-        return painted.equals(text) ? name : Chat.text(painted);
+        return teams.paintNametag(Entities.name(entity), name);
     }
 
     @Override

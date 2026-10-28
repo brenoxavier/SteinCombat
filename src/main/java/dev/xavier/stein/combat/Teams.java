@@ -8,6 +8,7 @@
 
 package dev.xavier.stein.combat;
 
+import dev.xavier.stein.loader.api.Chat;
 import dev.xavier.stein.loader.api.Players;
 import dev.xavier.stein.loader.api.Relation;
 
@@ -48,16 +49,21 @@ final class Teams {
     private Set<String> enemyClans = new HashSet<>();
 
     /**
-     * A nick's relation and the painted text of its last nametag and last Tab name. The relation
-     * comes only from the four lists (replaced whole in {@link #apply}), a few options, my nick and
-     * the clans — and the clans are already cached in one-second rounds ({@link Clans#epoch}).
-     * While none of that changes the answer is the same, and each player's nametag asked every
-     * frame: the lists twice, three new lower-case strings and four lookups.
+     * A nick's relation, its last painted nametag and the painted text of its last Tab name. The
+     * relation comes only from the four lists (replaced whole in {@link #apply}), a few options, my
+     * nick and the clans — and the clans are already cached in one-second rounds ({@link
+     * Clans#epoch}). While none of that changes the answer is the same, and each player's nametag
+     * asked every frame: the lists twice, three new lower-case strings and four lookups.
      */
     private static final class Rel {
         int relation;
-        String tagText;
-        String tagPainted;
+        // The nametag: the team prefix and suffix it was built from (the game's name above the
+        // head is prefix + nick + suffix) and the painted component, null when painting changes
+        // nothing.
+        boolean tagKnown;
+        String tagPrefix;
+        String tagSuffix;
+        Object tagComponent;
         String listText;
         String listPainted;
     }
@@ -296,20 +302,36 @@ final class Teams {
     }
 
     /**
-     * The nametag text painted by relation. Per nick: the text the game builds every frame is
-     * almost always the same, and so is the painted one (the relation is cached alongside, and
-     * starts over when it may have changed).
+     * The nametag (a game text component) painted by relation, built once per nick and reused while
+     * nothing it depends on changes.
+     *
+     * <p>The game builds the name above a player's head every frame as the team prefix, the nick
+     * and the team suffix, so those three are the key: comparing the prefix and suffix the
+     * scoreboard holds (the same strings until the server changes the team) costs no allocation,
+     * where reading the component's text and painting it again built two strings and a new
+     * component per player per frame. The relation and colors are cached alongside and start over
+     * when they may have changed ({@link #rel}).
+     *
+     * @param nick the player's nick
+     * @param name the name the game built (IChatComponent)
+     * @return the painted component, or {@code name} when painting changes nothing
      */
-    String paintNametag(String nick, String text) {
+    Object paintNametag(String nick, Object name) {
         if (nick == null) {
-            return paint(text, nick);
+            return name;
         }
         Rel r = rel(nick);
-        if (r.tagText == null || !(r.tagText == text || r.tagText.equals(text))) {
-            r.tagPainted = paint(text, nick);
-            r.tagText = text;
+        String prefix = Players.prefix(nick);
+        String suffix = Players.suffix(nick);
+        if (!r.tagKnown || r.tagPrefix != prefix || r.tagSuffix != suffix) {
+            String text = Chat.formatted(name); // "" if it is not a game text
+            String painted = paint(text, nick);
+            r.tagComponent = painted.equals(text) ? null : Chat.text(painted);
+            r.tagPrefix = prefix;
+            r.tagSuffix = suffix;
+            r.tagKnown = true;
         }
-        return r.tagPainted;
+        return r.tagComponent == null ? name : r.tagComponent;
     }
 
     /**
