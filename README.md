@@ -4,12 +4,16 @@ A [Stein Loader](https://github.com/Stein-Project) mod for Minecraft 1.8.9, for 
 enemy and ally on the HUD, and fight automations. Everything is set up on its page in the Panel (Insert), where each
 feature has its own key.
 
+Some servers do not allow these features: check the rules of where you play. A server can turn off the whole mod or
+one of them (`features` in `steinmod.json`).
+
 - **Team**: allies and enemies by nick or clan tag (the Panel, or a key aimed at a player), the members of your
   clan as allies, name colors by relation in the Tab list and above heads, and the lists from a JSON file at a URL
   (one per clan, with per-server sections). Hits on your allies are cancelled (and can go through to whoever is
   behind), and a key hides them from the screen: they disappear, become ghosts that hits go through, or are gone as
   if they were not there, with footprints or a square on the ground where they are.
 - **Combat and movement**: No Hit Delay, Autoclick, toggle sprint and Auto Walk.
+- **Target**: head, name, distance, health, armor and held item of whoever you are fighting, on the HUD grid.
 - **Automations**: Auto Armor, Auto Refill (from the server's virtual chest), Smart Effect (golden apple, Speed and
   Strength) and Auto Protect (the sword blocking in menus and at low health).
 - **HUD**: the nearest enemy, the nearest ally and the list of active features.
@@ -18,22 +22,22 @@ Some of these are things servers may detect and punish (the Panel says which); t
 
 ## Download
 
-Combat is a third-party mod: it is not on the Stein Client's official list. In the
-[Stein Client](https://github.com/Stein-Project/stein-client/releases/latest), add its index under third-party mods
+Combat is an official extra: it is made by the Stein Project, but it does not come with the Stein Client because it
+is for specific servers. In the [Stein Client](https://stein-project.github.io/client/), add its index under Additions
 and the client installs and updates it for you:
 
 ```
-https://github.com/brenoxavier/SteinCombat/releases/latest/download/steinmods.json
+https://github.com/Stein-Project/combat/releases/latest/download/steinmods.json
 ```
 
 By hand: download `Combat.steinmod` from the
-[latest release](https://github.com/brenoxavier/SteinCombat/releases/latest), put it in `.minecraft/mods` and play
+[latest release](https://github.com/Stein-Project/combat/releases/latest), put it in `.minecraft/mods` and play
 with the **Stein Loader** profile.
 
 ## Building
 
 You need **JDK 25 or newer**. The
-[Stein SDK](https://github.com/Stein-Project/stein-sdk) Gradle plugin prepares Minecraft 1.8.9 for compiling the
+[Stein SDK](https://github.com/Stein-Project/sdk) Gradle plugin prepares Minecraft 1.8.9 for compiling the
 first time, from your own installation or from Mojang.
 
 ```sh

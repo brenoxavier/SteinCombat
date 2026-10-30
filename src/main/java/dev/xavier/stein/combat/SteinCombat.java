@@ -18,6 +18,7 @@ import dev.xavier.stein.loader.api.Page;
 import dev.xavier.stein.loader.api.Players;
 import dev.xavier.stein.loader.api.Relation;
 import dev.xavier.stein.loader.api.Relations;
+import dev.xavier.stein.loader.api.Server;
 import dev.xavier.stein.loader.api.SteinMod;
 
 import java.io.File;
@@ -57,6 +58,15 @@ public final class SteinCombat implements SteinMod {
     private final ModContext ctx = ModContext.of(this);
 
     CombatConfig config = new CombatConfig();
+
+    private TargetConfig targetConfig;
+    private File targetFile;
+    private TargetHud targetHud;
+
+    /** Changes when the target's cached texts may be stale: once a second. */
+    int textEpoch;
+
+    private int ticks;
     final Teams teams = new Teams(this);
     final ToggleSprint sprint = new ToggleSprint();
     final AutoWalk autoWalk = new AutoWalk();
@@ -102,6 +112,12 @@ public final class SteinCombat implements SteinMod {
         Hud.register(new NearestPlayer(this, false));
         Hud.register(new NearestPlayer(this, true));
         Hud.register(new ActiveFeatures(this));
+        targetFile = new File(configFile.getParentFile(), "steincombat-target.json");
+        targetConfig = TargetConfigFile.load(targetFile, log());
+        // Written at once: from here on this file is the one that counts.
+        TargetConfigFile.save(targetConfig, targetFile, log());
+        targetHud = new TargetHud(targetConfig, this);
+        Hud.register(targetHud);
         log().info(
                         "started ("
                                 + configFile
@@ -174,6 +190,9 @@ public final class SteinCombat implements SteinMod {
 
     /** After changing the options: saves, rebuilds the lists and tells the Loader. */
     void save() {
+        if (targetFile != null) {
+            TargetConfigFile.save(targetConfig, targetFile, log());
+        }
         if (configFile != null) {
             ConfigFile.save(config, configFile);
         }
@@ -186,7 +205,6 @@ public final class SteinCombat implements SteinMod {
      */
     void apply() {
         teams.apply(config, config.remote ? remote.feed() : null);
-        Gameplay.setNoHitDelay(config.noHitDelay);
         publishColors();
     }
 
@@ -213,7 +231,9 @@ public final class SteinCombat implements SteinMod {
      */
     @Override
     public void onRenderWorld(float partialTicks) {
-        autoclick.frame();
+        if (Server.allows("autoclick")) {
+            autoclick.frame();
+        }
         marker.frame(partialTicks);
     }
 
@@ -228,6 +248,9 @@ public final class SteinCombat implements SteinMod {
 
     @Override
     public void onTickEnd() {
+        if (++ticks % 20 == 0) {
+            textEpoch++;
+        }
         if (keys == null) {
             return;
         }
@@ -238,19 +261,31 @@ public final class SteinCombat implements SteinMod {
         diagnostics.beforeKeys();
         keys.handle();
         // Armor first: in the tick it touches the inventory, Smart Effect starts nothing.
-        boolean armorActed = autoArmor.tick();
+        boolean armorActed = Server.allows("autoArmor") && autoArmor.tick();
         armorQuiet = armorActed ? 0 : Math.min(100, armorQuiet + 1);
-        autoRefill.tick();
-        smartEffect.tick(armorActed);
-        autoWalk.tick();
+        if (Server.allows("autoRefill")) {
+            autoRefill.tick();
+        }
+        if (Server.allows("smartEffect")) {
+            smartEffect.tick(armorActed);
+        }
+        autoWalk.tick(Server.allows("autoWalk"));
         marker.tick();
-        sprint.tick(config.toggleSprint);
+        sprint.tick(config.toggleSprint && Server.allows("toggleSprint"));
+        // Each tick: a server can take it away, and give it back, at any moment.
+        Gameplay.setNoHitDelay(config.noHitDelay && Server.allows("noHitDelay"));
         diagnostics.afterTick();
     }
 
     @Override
     public boolean onAttackEntity(Object target) {
-        return guard.onAttackEntity(target);
+        if (guard.onAttackEntity(target)) {
+            return true;
+        }
+        if (targetHud != null) {
+            targetHud.hit(target);
+        }
+        return false;
     }
 
     @Override
