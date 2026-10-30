@@ -38,10 +38,10 @@ final class AutoWalk {
         on = !on;
     }
 
-    /** Every tick, before {@link ToggleSprint#tick}. */
-    void tick() {
+    /** Every tick, before {@link ToggleSprint#tick}; not allowed, it stays off on this server. */
+    void tick(boolean allowed) {
         boolean down = pressedByHand();
-        if (Players.self() == null || down && !wasDown) {
+        if (!allowed || Players.self() == null || down && !wasDown) {
             on = false;
         }
         wasDown = down;
