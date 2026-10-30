@@ -23,14 +23,13 @@ final class CombatKeys {
     private final SteinCombat mod;
 
     final Keys.Binding toggleSprint;
+    final Keys.Binding autoWalk;
     final Keys.Binding ally;
     final Keys.Binding enemy;
     final Keys.Binding hide;
 
     // Each fight feature's on/off (no key by default: the player picks one in the Panel).
     final Keys.Binding noHitDelay;
-    final Keys.Binding keepSprint;
-    final Keys.Binding omniSprint;
     final Keys.Binding clanProtect;
     final Keys.Binding autoArmor;
     final Keys.Binding smartEffect;
@@ -42,12 +41,11 @@ final class CombatKeys {
     CombatKeys(SteinCombat mod) {
         this.mod = mod;
         toggleSprint = Keys.bind("key.steincombat.toggleSprint", Keys.KEY_G, CATEGORY);
+        autoWalk = Keys.bind("key.steincombat.autoWalk", Keys.KEY_J, CATEGORY);
         ally = Keys.bind("key.steincombat.ally", Keys.KEY_Y, CATEGORY);
         enemy = Keys.bind("key.steincombat.enemy", Keys.KEY_U, CATEGORY);
         hide = Keys.bind("key.steincombat.hide", Keys.KEY_H, CATEGORY);
         noHitDelay = Keys.bind("key.steincombat.noHitDelay", Keys.KEY_NONE, CATEGORY);
-        keepSprint = Keys.bind("key.steincombat.keepSprint", Keys.KEY_NONE, CATEGORY);
-        omniSprint = Keys.bind("key.steincombat.omniSprint", Keys.KEY_NONE, CATEGORY);
         clanProtect = Keys.bind("key.steincombat.clanProtect", Keys.KEY_NONE, CATEGORY);
         autoArmor = Keys.bind("key.steincombat.autoArmor", Keys.KEY_NONE, CATEGORY);
         smartEffect = Keys.bind("key.steincombat.smartEffect", Keys.KEY_NONE, CATEGORY);
@@ -65,6 +63,13 @@ final class CombatKeys {
             Say.actionBar(
                     Lang.tr(c.toggleSprint ? "steincombat.sprintOn" : "steincombat.sprintOff"));
         }
+        while (autoWalk.consumeClick()) {
+            mod.autoWalk.toggle();
+            Say.actionBar(
+                    Lang.tr(
+                            mod.autoWalk.on ? "steincombat.featureOn" : "steincombat.featureOff",
+                            Lang.tr("steincombat.autoWalk")));
+        }
         while (ally.consumeClick()) {
             mod.marks.allyAtCrosshair();
         }
@@ -78,14 +83,6 @@ final class CombatKeys {
         while (noHitDelay.consumeClick()) {
             c.noHitDelay = !c.noHitDelay;
             toggled("steincombat.noHitDelay", c.noHitDelay);
-        }
-        while (keepSprint.consumeClick()) {
-            c.sprintOnHit = !c.sprintOnHit;
-            toggled("steincombat.sprintOnHit", c.sprintOnHit);
-        }
-        while (omniSprint.consumeClick()) {
-            c.allDirections = !c.allDirections;
-            toggled("steincombat.allDirections", c.allDirections);
         }
         while (clanProtect.consumeClick()) {
             c.protectAllies = !c.protectAllies;

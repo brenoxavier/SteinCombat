@@ -13,9 +13,9 @@ import dev.xavier.stein.loader.api.Players;
 import dev.xavier.stein.loader.api.Screens;
 
 /**
- * Toggle sprint: sprinting without holding the game's sprint key — the mod keeps it pressed. With
- * "Sprint in all directions" (an option), also backwards and sideways, through the Loader. No
- * automatic jump; flying sprints as with the key held (vanilla).
+ * Toggle sprint: sprinting without holding the game's sprint key — the mod keeps it pressed, and
+ * the game decides when sprinting happens (forward only, with its own conditions). No automatic
+ * jump; flying sprints as with the key held (vanilla).
  */
 final class ToggleSprint {
 

@@ -27,14 +27,15 @@ import java.io.File;
  *
  * <ul>
  *   <li>Toggle sprint key (G): sprinting without holding the game's sprint key ({@link
- *       ToggleSprint}). With "Sprint in all directions" (an option), also backwards and sideways,
- *       through the Loader ({@code Gameplay.setSprintAllDirections}).
+ *       ToggleSprint}). Auto Walk (J): walking forward without holding the game's key ({@link
+ *       AutoWalk}) — a sprint with toggle sprint on.
  *   <li>Allies: nicks and clans on a list (the Panel, or the Y key aimed at a player; with Shift,
  *       their clan), and the members of my clan (an option, on). What being an ally gives is <b>the
  *       name's color</b>, in the Tab list ({@code onPlayerListName}) and above the head ({@code
  *       onNametag}).
- *   <li>My clan, and only it, has hits cancelled before they reach the server and disappears from
- *       the screen with the hide key ({@link ClanGuard}) — both only with "My clan is allied" on.
+ *   <li>Allies (my clan, marked nicks and allied clans) have hits cancelled before they reach the
+ *       server and leave the screen with the hide key — disappearing, as ghosts or as if they were
+ *       not there, with footprints where they walk ({@link ClanGuard}, {@link PresenceMarker}).
  *   <li>Enemies: nicks and clans on a list (the Panel, or the U key aimed at a player; with Shift,
  *       their clan). Marked as enemy beats clan and alliance ({@link Teams}).
  *   <li>The list from the internet ({@link RemoteList}): instead of everyone writing their own, the
@@ -53,14 +54,12 @@ public final class SteinCombat implements SteinMod {
     /** The mod id: the owner of what it registers in the Loader. */
     static final String MOD_ID = "steincombat";
 
-    /** No Slowdown is disabled: out of the Panel and always off. true brings it back. */
-    static final boolean NO_SLOWDOWN_ENABLED = false;
-
     private final ModContext ctx = ModContext.of(this);
 
     CombatConfig config = new CombatConfig();
     final Teams teams = new Teams(this);
     final ToggleSprint sprint = new ToggleSprint();
+    final AutoWalk autoWalk = new AutoWalk();
     final ClanGuard guard = new ClanGuard(this);
     final RemoteList remote = new RemoteList(this);
     final Marks marks = new Marks(this);
@@ -71,6 +70,7 @@ public final class SteinCombat implements SteinMod {
     private final SmartEffect smartEffect = new SmartEffect(this);
     private final Autoclick autoclick = new Autoclick(this);
     private final Diagnostics diagnostics = new Diagnostics(this);
+    private final PresenceMarker marker = new PresenceMarker(this);
 
     /** Ticks since Auto Armor last touched the inventory. */
     private int armorQuiet = 100;
@@ -187,11 +187,6 @@ public final class SteinCombat implements SteinMod {
     void apply() {
         teams.apply(config, config.remote ? remote.feed() : null);
         Gameplay.setNoHitDelay(config.noHitDelay);
-        Gameplay.setSprintOnHit(config.sprintOnHit);
-        // No Slowdown: disabled (hidden from the Panel, always off). The code stays to bring it
-        // back.
-        Gameplay.setNoHitSlowdown(NO_SLOWDOWN_ENABLED && config.noHitSlowdown);
-        Gameplay.setSprintAllDirections(config.allDirections);
         publishColors();
     }
 
@@ -212,10 +207,14 @@ public final class SteinCombat implements SteinMod {
         Relations.changed();
     }
 
-    /** The Autoclick: each click's time is checked every frame (see {@link Autoclick}). */
+    /**
+     * The Autoclick: each click's time is checked every frame (see {@link Autoclick}); and the
+     * hidden allies' footprints.
+     */
     @Override
     public void onRenderWorld(float partialTicks) {
         autoclick.frame();
+        marker.frame(partialTicks);
     }
 
     /**
@@ -243,6 +242,8 @@ public final class SteinCombat implements SteinMod {
         armorQuiet = armorActed ? 0 : Math.min(100, armorQuiet + 1);
         autoRefill.tick();
         smartEffect.tick(armorActed);
+        autoWalk.tick();
+        marker.tick();
         sprint.tick(config.toggleSprint);
         diagnostics.afterTick();
     }
@@ -250,6 +251,11 @@ public final class SteinCombat implements SteinMod {
     @Override
     public boolean onAttackEntity(Object target) {
         return guard.onAttackEntity(target);
+    }
+
+    @Override
+    public boolean onInteractEntity(Object target) {
+        return guard.onInteractEntity(target);
     }
 
     @Override
@@ -270,6 +276,10 @@ public final class SteinCombat implements SteinMod {
 
     @Override
     public Object onNametag(Object entity, Object name) {
+        Object ghost = guard.ghostName(entity);
+        if (ghost != null) {
+            return ghost;
+        }
         if (!config.colorNames || !Entities.isPlayer(entity)) {
             return name;
         }

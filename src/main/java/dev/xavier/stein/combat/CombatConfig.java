@@ -43,27 +43,35 @@ final class CombatConfig {
     /** Toggle sprint: the mod keeps sprinting without the game's sprint key (the G key). */
     boolean toggleSprint = true;
 
-    /**
-     * Sprinting backwards and sideways too. <b>On a server, anticheats usually punish it</b>, like
-     * No Hit Delay and sprinting through the hit. On by default: the default chosen for Stein.
-     */
-    boolean allDirections = true;
-
-    /** A hit on my clan is cancelled. */
+    /** A hit on an ally (my clan, a marked nick or an allied clan) is cancelled. */
     boolean protectAllies = true;
 
     /**
-     * The hit cancelled on someone of my clan goes to the first one in the line of aim, behind them
-     * and within reach, who is not in my clan. With nobody there, it is only cancelled.
+     * The hit cancelled on an ally goes to the first one in the line of aim, behind them and within
+     * reach, who is not an ally. With nobody there, it is only cancelled.
      */
     boolean clanHitThrough = true;
 
     /**
-     * With the hide key on, an ally outside my clan becomes a ghost instead of staying solid: the
-     * game's own 15% silhouette, without armor. They are still there for everything else —
-     * including hits.
+     * How the hide key hides the allies: {@link ClanGuard#DISAPPEAR}, {@link ClanGuard#GHOST} or
+     * {@link ClanGuard#GONE}.
      */
-    boolean ghostAllies = true;
+    int hideStyle = ClanGuard.DISAPPEAR;
+
+    /** Ghost style: no name above the ghosts' heads either. */
+    boolean ghostHideName = false;
+
+    /**
+     * Disappear and gone styles: a sign on the ground where each hidden ally is (footprints or a
+     * square, {@link #markerStyle}), so that nobody walks into a player they cannot see.
+     */
+    boolean presenceMarker = true;
+
+    /** {@link PresenceMarker#FOOTPRINTS} or {@link PresenceMarker#SQUARE}. */
+    int markerStyle = PresenceMarker.FOOTPRINTS;
+
+    /** The marker in the clan or ally color; off, black. */
+    boolean markerColored = true;
 
     /** The members of my clan (the server's SteinCombat plugin) count as allies. */
     boolean clanAllies = true;
@@ -191,14 +199,6 @@ final class CombatConfig {
 
     /** "No Hit Delay": without 1.8's penalty for a missed hit, half a second without hits. */
     boolean noHitDelay = true;
-
-    /**
-     * Sprinting survives the hit: without 1.8's "sprint reset", where every knockback hit drops it.
-     */
-    boolean sprintOnHit = true;
-
-    /** Keep Sprint's sub-option: the hit does not slow down either. */
-    boolean noHitSlowdown = false;
 
     /** The allies' nicks, as written. */
     final List<String> allies = new ArrayList<>();

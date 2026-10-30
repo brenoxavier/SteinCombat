@@ -6,9 +6,10 @@ feature has its own key.
 
 - **Team**: allies and enemies by nick or clan tag (the Panel, or a key aimed at a player), the members of your
   clan as allies, name colors by relation in the Tab list and above heads, and the lists from a JSON file at a URL
-  (one per clan, with per-server sections). Hits on your clan are cancelled (and can go through to whoever is
-  behind), and a key hides your clan from the screen.
-- **Combat and movement**: No Hit Delay, Autoclick, toggle sprint, Keep Sprint and sprint in all directions.
+  (one per clan, with per-server sections). Hits on your allies are cancelled (and can go through to whoever is
+  behind), and a key hides them from the screen: they disappear, become ghosts that hits go through, or are gone as
+  if they were not there, with footprints or a square on the ground where they are.
+- **Combat and movement**: No Hit Delay, Autoclick, toggle sprint and Auto Walk.
 - **Automations**: Auto Armor, Auto Refill (from the server's virtual chest), Smart Effect (golden apple, Speed and
   Strength) and Auto Protect (the sword blocking in menus and at low health).
 - **HUD**: the nearest enemy, the nearest ally and the list of active features.

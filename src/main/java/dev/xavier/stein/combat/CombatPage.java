@@ -140,7 +140,7 @@ final class CombatPage {
                 });
     }
 
-    /** Movement: sprinting. */
+    /** Movement: sprinting and walking. */
     private void movement(Page page) {
         page.section(tr("steincombat.section.movement"));
         // Toggle sprint: the key (G) turns it on and off, and so does the row.
@@ -154,49 +154,22 @@ final class CombatPage {
                         },
                         keys.toggleSprint,
                         "toggleSprint"));
+        // Auto Walk: its key (J) starts and stops it; with toggle sprint on, it sprints.
+        AutoWalk walk = mod.autoWalk;
         page.option(
                 feature(
-                        "steincombat.sprintOnHit",
-                        () -> c.sprintOnHit,
-                        v -> {
-                            c.sprintOnHit = v;
-                            mod.save();
-                        },
-                        keys.keepSprint,
-                        "keepSprint"));
-        // Keep Sprint's sub-option (No Slowdown): turned off, out of the Panel.
-        if (SteinCombat.NO_SLOWDOWN_ENABLED) {
-            page.option(
-                    Option.toggle(
-                                    INDENT + tr("steincombat.noHitSlowdown"),
-                                    () -> c.noHitSlowdown,
-                                    v -> {
-                                        c.noHitSlowdown = v;
-                                        mod.save();
-                                    })
-                            .visibleWhen(() -> c.sprintOnHit));
-        }
-        page.option(
-                feature(
-                        "steincombat.allDirections",
-                        () -> c.allDirections,
-                        v -> {
-                            c.allDirections = v;
-                            mod.save();
-                        },
-                        keys.omniSprint,
-                        "omniSprint"));
+                        "steincombat.autoWalk",
+                        () -> walk.on,
+                        v -> walk.on = v,
+                        keys.autoWalk,
+                        "autoWalk"));
         page.restore(
                 () -> {
                     CombatConfig d = new CombatConfig();
                     c.toggleSprint = d.toggleSprint;
-                    c.sprintOnHit = d.sprintOnHit;
-                    c.noHitSlowdown = d.noHitSlowdown;
-                    c.allDirections = d.allDirections;
                     mod.save();
-                    keys.keepSprint.setKey(Keys.KEY_NONE);
-                    keys.omniSprint.setKey(Keys.KEY_NONE);
                     keys.toggleSprint.setKey(Keys.KEY_G);
+                    keys.autoWalk.setKey(Keys.KEY_J);
                 });
     }
 
@@ -213,7 +186,7 @@ final class CombatPage {
                         },
                         keys.clanProtect,
                         "clanProtect"));
-        // Clan Protect's sub-option: the hit cancelled on my clan goes through to whoever is
+        // Ally Protect's sub-option: the hit cancelled on an ally goes through to whoever is
         // behind.
         page.option(
                 toggle(
@@ -229,11 +202,52 @@ final class CombatPage {
                         v -> guard.hiding = v,
                         keys.hide,
                         "hiddenAllies"));
+        // How the hide key hides: disappearing (the aim still finds them), as ghosts (hits go
+        // through) or as if they did not exist.
+        page.option(
+                Option.cycle(
+                        INDENT + tr("steincombat.hideStyle"),
+                        new String[] {
+                            tr("steincombat.hideStyle.disappear"),
+                            tr("steincombat.hideStyle.ghost"),
+                            tr("steincombat.hideStyle.gone")
+                        },
+                        () -> c.hideStyle,
+                        i -> {
+                            c.hideStyle = i;
+                            mod.save();
+                        }));
         page.option(
                 toggle(
-                        INDENT + tr("steincombat.ghostAllies"),
-                        () -> c.ghostAllies,
-                        v -> c.ghostAllies = v));
+                                INDENT + tr("steincombat.ghostHideName"),
+                                () -> c.ghostHideName,
+                                v -> c.ghostHideName = v)
+                        .visibleWhen(() -> c.hideStyle == ClanGuard.GHOST));
+        page.option(
+                toggle(
+                                INDENT + tr("steincombat.presenceMarker"),
+                                () -> c.presenceMarker,
+                                v -> c.presenceMarker = v)
+                        .visibleWhen(() -> c.hideStyle != ClanGuard.GHOST));
+        page.option(
+                Option.cycle(
+                                INDENT + INDENT + tr("steincombat.markerStyle"),
+                                new String[] {
+                                    tr("steincombat.markerStyle.footprints"),
+                                    tr("steincombat.markerStyle.square")
+                                },
+                                () -> c.markerStyle,
+                                i -> {
+                                    c.markerStyle = i;
+                                    mod.save();
+                                })
+                        .visibleWhen(() -> c.hideStyle != ClanGuard.GHOST && c.presenceMarker));
+        page.option(
+                toggle(
+                                INDENT + INDENT + tr("steincombat.markerColored"),
+                                () -> c.markerColored,
+                                v -> c.markerColored = v)
+                        .visibleWhen(() -> c.hideStyle != ClanGuard.GHOST && c.presenceMarker));
         page.option(
                 toggle(tr("steincombat.clanAllies"), () -> c.clanAllies, v -> c.clanAllies = v));
         // Off by default: it is what made "[VIP]" and "[ADM]" enemies on a server that is not about
@@ -249,7 +263,11 @@ final class CombatPage {
                     CombatConfig d = new CombatConfig();
                     c.protectAllies = d.protectAllies;
                     c.clanHitThrough = d.clanHitThrough;
-                    c.ghostAllies = d.ghostAllies;
+                    c.hideStyle = d.hideStyle;
+                    c.ghostHideName = d.ghostHideName;
+                    c.presenceMarker = d.presenceMarker;
+                    c.markerStyle = d.markerStyle;
+                    c.markerColored = d.markerColored;
                     c.clanAllies = d.clanAllies;
                     c.enemyFromPrefix = d.enemyFromPrefix;
                     mod.save();

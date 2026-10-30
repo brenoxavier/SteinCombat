@@ -59,16 +59,7 @@ final class Features {
                             "steincombat.toggleSprintName",
                             MOVEMENT,
                             m -> m.config.toggleSprint),
-                    new Feature(
-                            "keepSprint",
-                            "steincombat.sprintOnHit",
-                            MOVEMENT,
-                            m -> m.config.sprintOnHit),
-                    new Feature(
-                            "omniSprint",
-                            "steincombat.allDirections",
-                            MOVEMENT,
-                            m -> m.config.allDirections),
+                    new Feature("autoWalk", "steincombat.autoWalk", MOVEMENT, m -> m.autoWalk.on),
                     new Feature(
                             "clanProtect",
                             "steincombat.protect",

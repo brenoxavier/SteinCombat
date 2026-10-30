@@ -90,9 +90,16 @@ final class ConfigFile {
      */
     private static void read(CombatConfig c, JsonObject o) {
         c.toggleSprint = bool(o, "toggleSprint", c.toggleSprint);
-        c.allDirections = bool(o, "allDirections", c.allDirections);
         c.protectAllies = bool(o, "protectAllies", c.protectAllies);
-        c.ghostAllies = bool(o, "ghostAllies", c.ghostAllies);
+        if (o.has("hideStyle")) {
+            c.hideStyle = clamp(o.get("hideStyle").getAsInt(), 0, ClanGuard.GONE);
+        }
+        c.ghostHideName = bool(o, "ghostHideName", c.ghostHideName);
+        c.presenceMarker = bool(o, "presenceMarker", c.presenceMarker);
+        if (o.has("markerStyle")) {
+            c.markerStyle = clamp(o.get("markerStyle").getAsInt(), 0, PresenceMarker.SQUARE);
+        }
+        c.markerColored = bool(o, "markerColored", c.markerColored);
         c.colorNames = bool(o, "colorNames", bool(o, "colorAllies", c.colorNames));
         // A file from before the four colors (it only had "allyColor", used for allies and for my
         // clan): the new colors all start at the default, otherwise the green from there would
@@ -173,8 +180,6 @@ final class ConfigFile {
             readRule(o, RULE_KEYS[i], c.armorRules[i]);
         }
         c.noHitDelay = bool(o, "noHitDelay", c.noHitDelay);
-        c.sprintOnHit = bool(o, "sprintOnHit", c.sprintOnHit);
-        c.noHitSlowdown = bool(o, "noHitSlowdown", c.noHitSlowdown);
         if (o.has("allies") && o.get("allies").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("allies")) {
                 String nick = e.getAsString().trim();
@@ -210,9 +215,12 @@ final class ConfigFile {
     static void save(CombatConfig c, File file) {
         JsonObject o = new JsonObject();
         o.addProperty("toggleSprint", c.toggleSprint);
-        o.addProperty("allDirections", c.allDirections);
         o.addProperty("protectAllies", c.protectAllies);
-        o.addProperty("ghostAllies", c.ghostAllies);
+        o.addProperty("hideStyle", c.hideStyle);
+        o.addProperty("ghostHideName", c.ghostHideName);
+        o.addProperty("presenceMarker", c.presenceMarker);
+        o.addProperty("markerStyle", c.markerStyle);
+        o.addProperty("markerColored", c.markerColored);
         o.addProperty("colorNames", c.colorNames);
         o.addProperty("clanColor", String.valueOf(c.clanColor));
         o.addProperty("allyColor", String.valueOf(c.allyColor));
@@ -257,8 +265,6 @@ final class ConfigFile {
             o.add(RULE_KEYS[i], writeRule(c.armorRules[i]));
         }
         o.addProperty("noHitDelay", c.noHitDelay);
-        o.addProperty("sprintOnHit", c.sprintOnHit);
-        o.addProperty("noHitSlowdown", c.noHitSlowdown);
         o.add("allies", strings(c.allies));
         o.add("allyClans", strings(c.allyClans));
         o.add("enemies", strings(c.enemies));

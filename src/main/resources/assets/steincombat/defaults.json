@@ -1,8 +1,11 @@
 {
   "toggleSprint": true,
-  "allDirections": true,
   "protectAllies": true,
-  "ghostAllies": true,
+  "hideStyle": 0,
+  "ghostHideName": false,
+  "presenceMarker": true,
+  "markerStyle": 0,
+  "markerColored": true,
   "colorNames": true,
   "clanColor": "a",
   "allyColor": "9",
@@ -83,8 +86,6 @@
     "keepLevel": 0
   },
   "noHitDelay": true,
-  "sprintOnHit": true,
-  "noHitSlowdown": false,
   "allies": [],
   "allyClans": [],
   "enemies": [],
